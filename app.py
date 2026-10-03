@@ -1,60 +1,61 @@
 
 import streamlit as st
-import numpy as np
-import matplotlib.pyplot as plt
 
 st.set_page_config(
-    page_title="Simulador de calor",
-    page_icon="🌡️",
+    page_title="Calculadora de límites",
+    page_icon="📘",
     layout="wide"
 )
 
-st.title("Simulador de la ecuación de calor")
-st.write(
-    "Observa cómo evoluciona la temperatura "
-    "en una barra cuyos extremos están a temperatura cero."
-)
+# Inicializar la sección seleccionada
+if "seccion" not in st.session_state:
+    st.session_state.seccion = "Límite"
 
-st.latex(r"\frac{\partial u}{\partial t}"
-         r"=\alpha\frac{\partial^2u}{\partial x^2}")
+# Título principal
+st.title("Calculadora matemática")
+st.write("Selecciona el tema que deseas consultar.")
 
-st.sidebar.header("Parámetros")
+# Menú de botones
+opciones = [
+    "Límite",
+    "Derivada",
+    "Integral",
+    "Suma infinita",
+    "Apéndice"
+]
 
-alpha = st.sidebar.slider(
-    "Difusividad térmica α",
-    min_value=0.01,
-    max_value=1.0,
-    value=0.1,
-    step=0.01
-)
+columnas = st.columns(5)
 
-tiempo = st.sidebar.slider(
-    "Tiempo de simulación",
-    min_value=0.0,
-    max_value=1.0,
-    value=0.2,
-    step=0.01
-)
+for columna, opcion in zip(columnas, opciones):
+    with columna:
+        if st.button(
+            opcion,
+            key=opcion,
+            use_container_width=True
+        ):
+            st.session_state.seccion = opcion
 
-# Solución analítica para u(x,0) = sin(pi*x)
-x = np.linspace(0, 1, 400)
-u = np.exp(-alpha * np.pi**2 * tiempo) * np.sin(np.pi * x)
+st.divider()
 
-fig, ax = plt.subplots()
-ax.plot(x, u, label=f"t = {tiempo:.2f}")
-ax.set_xlabel("Posición x")
-ax.set_ylabel("Temperatura u(x,t)")
-ax.set_title("Distribución de temperatura")
-ax.grid(True)
-ax.legend()
+# Mostrar el contenido de la sección seleccionada
+seccion = st.session_state.seccion
 
-st.pyplot(fig)
-plt.close(fig)
+if seccion == "Límite":
+    st.header("Límites")
+    st.write("Aquí encontrarás teoría y ejemplos de límites.")
 
-st.metric("Difusividad térmica", f"{alpha:.2f}")
-st.metric("Temperatura máxima", f"{np.max(u):.4f}")
+elif seccion == "Derivada":
+    st.header("Derivadas")
+    st.write("Aquí encontrarás teoría y ejemplos de derivadas.")
 
-st.caption(
-    "Modelo: solución analítica de la ecuación de calor "
-    "con extremos a temperatura cero."
-)
+elif seccion == "Integral":
+    st.header("Integrales")
+    st.write("Aquí encontrarás teoría y ejemplos de integrales.")
+
+elif seccion == "Suma infinita":
+    st.header("Sumas infinitas")
+    st.write("Aquí encontrarás teoría y ejemplos de series.")
+
+elif seccion == "Apéndice":
+    st.header("Apéndice")
+    st.write("Aquí encontrarás definiciones y resultados auxiliares.")
