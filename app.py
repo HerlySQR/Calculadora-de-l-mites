@@ -51,6 +51,8 @@ st.divider()
 # Obtener la sección seleccionada
 seccion = st.session_state.seccion
 
+def quitar_ceros(valor):
+    return f"{valor:.15f}".rstrip("0").rstrip(".")
 
 # APÉNDICE
 
@@ -337,6 +339,58 @@ elif seccion == "Límite":
 
             # Liberar memoria de Matplotlib
             plt.close(fig)
+
+            # APROXIMACIÓN PASO A PASO
+
+            st.subheader("Aproximación paso a paso")
+            st.write(
+                "Observamos qué ocurre con f(x) cuando x se acerca cada vez "
+                "más a a."
+            )
+
+            # Distancias cada vez más pequeñas
+            distancias = [10.0**(-n) for n in range(1, 13)]
+
+            # Crear las listas para ambos lados
+            datos_izquierda = []
+            datos_derecha = []
+
+            for distancia in distancias:
+                # Aproximación por la izquierda
+                x_izq = float(a) - distancia
+                # Aproximación por la derecha
+                x_der = float(a) + distancia
+
+                # Evaluar f(x)
+                try:
+                    y_izq = f(x_izq)
+                    y_der = f(x_der)
+                except Exception:
+                    y_izq = np.nan
+                    y_der = np.nan
+
+                datos_izquierda.append({
+                    "Distancia": quitar_ceros(distancia),
+                    "x": quitar_ceros(x_izq),
+                    "f(x)": quitar_ceros(y_izq)
+                })
+
+                datos_derecha.append({
+                    "Distancia": quitar_ceros(distancia),
+                    "x": quitar_ceros(x_der),
+                    "f(x)": quitar_ceros(y_der)
+                })
+
+            # Mostrar las tablas
+            col1, col2 = st.columns(2)
+
+            with col1:
+                st.write("**Aproximación por la izquierda**")
+                st.dataframe(datos_izquierda, use_container_width = True)
+
+            with col2:
+                st.write("**Aproximación por la derecha**")
+                st.dataframe(datos_derecha, use_container_width = True)
         except Exception as e:
             pass
 
