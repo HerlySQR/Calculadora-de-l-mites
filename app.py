@@ -6,24 +6,21 @@ import sympy as sp
 # CONFIGURACIÓN
 
 st.set_page_config(
-    page_title="Calculadora matemática",
-    page_icon="📘",
-    layout="wide"
+    page_title = "Calculadora matemática",
+    page_icon = "📘",
+    layout = "wide"
 )
-
 
 # Variable simbólica
 x = sp.symbols("x")
 
 # CONTROL DEL MENÚ
-
 if "seccion" not in st.session_state:
     st.session_state.seccion = "Límite"
 
 st.title("Calculadora matemática")
 
 st.write("Explora funciones, límites, derivadas, integrales y series.")
-
 
 # Opciones del menú
 opciones = [
@@ -34,29 +31,97 @@ opciones = [
     "Apéndice"
 ]
 
-
 # Crear cinco columnas
 columnas = st.columns(5)
 
 # Crear los botones
 for columna, opcion in zip(columnas, opciones):
-
     with columna:
         if st.button(opcion, key = opcion, use_container_width = True):
             st.session_state.seccion = opcion
-
 
 st.divider()
 
 # Obtener la sección seleccionada
 seccion = st.session_state.seccion
 
-
 # FUNCIÓN PARA MOSTRAR NÚMEROS, ELIMINANDO CEROS INNECESARIOS
 def quitar_ceros(valor):
     if not np.isfinite(valor):
         return str(valor)
     return f"{valor:.12f}".rstrip("0").rstrip(".")
+
+def encontrar_intervalo_infinito(f, limite, direccion, tolerancia = 0.01, minimo = 10, maximo = 1e12):
+    x_actual = float(minimo)
+
+    # Número de veces consecutivas que debemos estar suficientemente cerca
+    puntos_convergencia = 3
+
+    consecutivos = 0
+
+    ultimo_x = x_actual
+
+    for _ in range(30):
+        # Elegir x según la dirección
+        if direccion == 1:
+            x_valor = x_actual
+        else:
+            x_valor = -x_actual
+
+        # Evaluar la función
+        try:
+            with np.errstate(divide = "ignore", invalid = "ignore", over = "ignore"):
+                y_valor = float(f(x_valor))
+        except Exception:
+            x_actual *= 10
+            continue
+
+        # Comprobar que el valor sea finito
+        if not np.isfinite(y_valor):
+            x_actual *= 10
+            continue
+
+        # Si el límite es finito, comprobar convergencia
+        if limite.is_finite is True:
+            try:
+                limite_num = float(sp.N(limite))
+                error = abs(y_valor - limite_num)
+
+                if error < tolerancia:
+                    consecutivos += 1
+                else:
+                    consecutivos = 0
+
+                if (consecutivos>= puntos_convergencia):
+                    ultimo_x = x_actual
+                    break
+
+            except Exception:
+                pass
+
+        # Si el límite es infinito, no necesitamos buscar convergencia
+        else:
+            ultimo_x = x_actual
+            break
+
+        ultimo_x = x_actual
+        x_actual *= 10
+
+        # Evitar intervalos excesivamente grandes
+        if x_actual >= maximo:
+            x_actual = maximo
+            ultimo_x = maximo
+            break
+
+    # Crear intervalo final
+    if direccion == 1:
+        xmin = 1
+        xmax = max(100, ultimo_x)
+    else:
+        xmin = -max(100, ultimo_x)
+        xmax = -1
+
+    return xmin, xmax
 
 # APÉNDICE
 
@@ -71,19 +136,12 @@ elif seccion == "Límite":
     st.write("Introduce una función y el valor al que se aproxima x.")
 
     # INGRESAR FUNCIÓN
-
-    funcion_texto = st.text_input(
-        "Función f(x)",
-        value="sin(x)/x",
-        key="funcion_limite"
-    )
+    funcion_texto = st.text_input("Función f(x)", value = "sin(x)/x", key = "funcion_limite")
 
     # ELEGIR HACIA DÓNDE SE APROXIMA x
-
     tipo_a = st.selectbox("x se aproxima a", ["Número", "+∞", "-∞"], key = "tipo_punto_limite")
 
     # SI a ES UN NÚMERO
-
     if tipo_a == "Número":
         a = st.number_input("Valor de a", value = 0.0, step = 0.1, format = "%.6f", key = "punto_limite")
     elif tipo_a == "+∞":
@@ -92,40 +150,27 @@ elif seccion == "Límite":
         a = -sp.oo
 
     # BOTÓN ANALIZAR
-
     if st.button("Analizar límite", type = "primary", key = "analizar_limite"):
         try:
             # CONVERTIR TEXTO A EXPRESIÓN DE SYMPY
-
             funcion = sp.sympify(funcion_texto)
 
             # VERIFICAR QUE SOLO APAREZCA x
-
             if funcion.free_symbols - {x}:
-                st.error(
-                    "La función solamente puede utilizar "
-                    "la variable x."
-                )
-
+                st.error("La función solamente puede utilizar la variable x.")
                 st.stop()
 
             # MOSTRAR FUNCIÓN
-
             st.latex(r"f(x) = " + sp.latex(funcion))
 
             # CASO 1: x → +∞ O x → -∞
-
             if a == sp.oo or a == -sp.oo:
-
                 # CALCULAR LÍMITE
-
                 with st.spinner("Calculando el límite..."):
                     limite = sp.limit(funcion, x, a)
 
                 # MOSTRAR RESULTADO
-
                 st.subheader("Límite en infinito")
-
                 st.latex(r"\lim_{x\to " + sp.latex(a) + r"} f(x) = " + sp.latex(limite))
 
                 # INTERPRETACIÓN
@@ -137,38 +182,27 @@ elif seccion == "Límite":
                 elif isinstance(limite, sp.AccumBounds):
                     st.warning("El límite no existe.")
 
-                    st.info(
-                        "La función presenta un comportamiento oscilatorio "
-                        "cuando x tiende a infinito."
-                    )
+                    st.info("La función presenta un comportamiento oscilatorio cuando x tiende a infinito.")
                     st.latex(r"\text{Valores de acumulación: }" + sp.latex(limite))
 
                 elif limite.is_finite is True:
                     st.success("La función se aproxima a un valor finito.")
-
                 else:
-                    st.warning(
-                        "No se pudo determinar simbólicamente el "
-                        "comportamiento del límite."
-                    )
+                    st.warning("No se pudo determinar simbólicamente el comportamiento del límite.")
 
                 # FUNCIÓN NUMÉRICA
-
                 f = sp.lambdify(x, funcion, modules = ["numpy"])
 
+                # ELEGIR INTERVALO
+                xmin, xmax = encontrar_intervalo_infinito(f, limite, 1 if a == sp.oo else -1)
+                valores_x = np.linspace(xmin, xmax, 3000)
+
                 # TABLA DE APROXIMACIÓN
-
                 st.subheader("Aproximación paso a paso")
-
-                st.write(
-                    "Observamos qué ocurre con f(x) "
-                    "cuando |x| crece cada vez más."
-                )
-
+                st.write("Observamos qué ocurre con f(x) cuando |x| crece cada vez más.")
 
                 # Valores: 10, 100, 1000, 10000, ...
-
-                valores_aproximacion = [10.0 ** n for n in range(1, 7)]
+                valores_aproximacion = [10.0 ** n for n in range(1, int(np.log10(xmax)) + 1)]
 
                 datos = []
 
@@ -179,11 +213,7 @@ elif seccion == "Límite":
                         x_valor = -valor
 
                     try:
-                        with np.errstate(
-                            divide="ignore",
-                            invalid="ignore",
-                            over="ignore"
-                        ):
+                        with np.errstate(divide = "ignore", invalid = "ignore", over = "ignore"):
                             y_valor = float(f(x_valor))
                     except Exception:
                         y_valor = np.nan
@@ -196,27 +226,11 @@ elif seccion == "Límite":
                 st.dataframe(datos, use_container_width = True, hide_index = True)
 
                 # GRÁFICA
-
                 st.subheader("Gráfica")
-
-                # ELEGIR INTERVALO
-
-                if a == sp.oo:
-                    xmin = 1
-                    xmax = 1000
-                else:
-                    xmin = -1000
-                    xmax = -1
-
-                valores_x = np.linspace(xmin, xmax, 3000)
 
                 # EVALUAR FUNCIÓN
 
-                with np.errstate(
-                    divide = "ignore",
-                    invalid = "ignore",
-                    over = "ignore"
-                ):
+                with np.errstate(divide = "ignore", invalid = "ignore", over = "ignore"):
                     valores_y = np.asarray(f(valores_x), dtype = float)
 
                 if valores_y.ndim == 0:
@@ -255,19 +269,13 @@ elif seccion == "Límite":
                                 es_oscilatoria = True
 
                 if es_oscilatoria:
-                    st.info(
-                        "La función continúa oscilando "
-                        "cuando x tiende a infinito."
-                    )
+                    st.info("La función continúa oscilando cuando x tiende a infinito.")
 
                 # CREAR GRÁFICA
-
                 fig, ax = plt.subplots(figsize = (10, 5))
-
                 ax.plot(valores_x, valores_y, label="f(x)")
 
                 # LÍNEA DEL LÍMITE
-
                 if limite not in (sp.oo, -sp.oo):
                     try:
                         limite_num = float(sp.N(limite))
@@ -283,11 +291,9 @@ elif seccion == "Límite":
                         pass
 
                 # EJE X
-
                 ax.axhline(0, color = "black", linewidth = 0.7)
 
                 # CONFIGURACIÓN
-
                 ax.set_xlim(xmin, xmax)
                 ax.set_xlabel("x")
                 ax.set_ylabel("f(x)")
@@ -299,21 +305,14 @@ elif seccion == "Límite":
                 plt.close(fig)
 
             # CASO 2: x → a, CON a FINITO
-
             else:
                 # CALCULAR LÍMITES LATERALES
-
-                with st.spinner(
-                    "Analizando el comportamiento "
-                    "de la función..."
-                ):
-
+                with st.spinner("Analizando el comportamiento de la función..."):
                     limite_izquierdo = sp.limit(funcion, x, a, dir = "-")
                     limite_derecho = sp.limit(funcion, x, a, dir = "+")
                     limite = sp.limit(funcion, x, a)
 
                 # MOSTRAR LÍMITES LATERALES
-
                 col1, col2 = st.columns(2)
 
                 with col1:
@@ -325,18 +324,15 @@ elif seccion == "Límite":
                     st.latex(r"\lim_{x\to " + sp.latex(a) + r"^+} f(x)" r" = " + sp.latex(limite_derecho))
 
                 # DETECCIÓN DEL TIPO DE COMPORTAMIENTO
-
                 es_infinito_izq = (limite_izquierdo in (sp.oo, -sp.oo))
                 es_infinito_der = (limite_derecho in (sp.oo, -sp.oo))
 
                 # CASO 1: ASÍNTOTA VERTICAL
-
                 if (es_infinito_izq or es_infinito_der):
                     st.error(f"Se detectó una asíntota " f"vertical en x = {a}")
                     tipo_grafica = "asintota"
 
                 # CASO 2: LÍMITES LATERALES IGUALES
-
                 elif sp.simplify(limite_izquierdo - limite_derecho) == 0:
                     limite_finito = limite
                     try:
@@ -345,16 +341,7 @@ elif seccion == "Límite":
                         valor_a = sp.nan
 
                     # COMPROBAR DISCONTINUIDAD REMOVIBLE
-
-                    es_indefinido = (
-                        valor_a.has(sp.zoo)
-                        or
-                        valor_a.has(sp.oo)
-                        or
-                        valor_a.has(-sp.oo)
-                        or
-                        valor_a.has(sp.nan)
-                    )
+                    es_indefinido = (valor_a.has(sp.zoo) or valor_a.has(sp.oo) or valor_a.has(-sp.oo) or valor_a.has(sp.nan))
 
                     coincide = False
 
@@ -365,52 +352,29 @@ elif seccion == "Límite":
                             coincide = False
 
                     if not coincide:
-                        st.warning(
-                            "Se detectó una "
-                            "discontinuidad removible."
-                        )
-
-                        st.write(
-                            "El límite existe y es finito, "
-                            "pero la función no coincide "
-                            "con el límite en x = a."
-                        )
+                        st.warning("Se detectó una discontinuidad removible.")
+                        st.write("El límite existe y es finito, pero la función no coincide con el límite en x = a.")
 
                         st.latex(r"\lim_{x\to " + sp.latex(a) + r"} f(x) = " + sp.latex(limite_finito))
 
                         tipo_grafica = "removible"
 
                     # FUNCIÓN CONTINUA
-
                     else:
-                        st.success(
-                            "La función es continua "
-                            "en el punto analizado."
-                        )
-
+                        st.success("La función es continua en el punto analizado.")
                         st.latex(r"\lim_{x\to " + sp.latex(a) + r"} f(x) = " + sp.latex(limite_finito))
-
                         tipo_grafica = "continua"
 
                 # CASO 3: LÍMITES LATERALES DIFERENTES
-
                 else:
-                    st.warning(
-                        "Los límites laterales son "
-                        "diferentes. Por lo tanto, "
-                        "el límite bilateral no existe."
-                    )
-
+                    st.warning("Los límites laterales son diferentes. Por lo tanto, el límite bilateral no existe.")
                     st.latex(r"\lim_{x\to " + sp.latex(a) + r"} f(x)" r"\quad\text{no existe}")
-
                     tipo_grafica = "diferentes"
 
                 # FUNCIÓN NUMÉRICA
-
                 f = sp.lambdify(x, funcion, modules = ["numpy"])
 
                 # ELEGIR AUTOMÁTICAMENTE EL INTERVALO
-
                 escala = max(1.0, abs(float(a)))
                 radio = 0.5 * escala
                 xmin = (float(a) - radio)
@@ -419,22 +383,15 @@ elif seccion == "Límite":
                 derecha = np.linspace(float(a) + radio * 1e-5, xmax, 2500)
 
                 # EVALUAR FUNCIÓN
-
                 def evaluar(valores_x):
 
-                    with np.errstate(
-                        divide = "ignore",
-                        invalid = "ignore",
-                        over = "ignore"
-                    ):
-
+                    with np.errstate(divide = "ignore", invalid = "ignore", over = "ignore"):
                         valores_y = np.asarray(f(valores_x), dtype = float)
 
                     if valores_y.ndim == 0:
                         valores_y = np.full_like(valores_x, valores_y.item())
 
                     valores_y = np.broadcast_to(valores_y, valores_x.shape).astype(float, copy = True)
-
                     valores_y[~np.isfinite(valores_y)] = np.nan
 
                     return valores_y
@@ -443,27 +400,21 @@ elif seccion == "Límite":
                 y_derecha = evaluar(derecha)
 
                 # OBTENER VALORES PARA LA ESCALA
-
                 valores = np.concatenate([
                     np.abs(y_izquierda[np.isfinite(y_izquierda)]),
                     np.abs(y_derecha[np.isfinite(y_derecha)])
                 ])
 
                 if valores.size == 0:
-                    st.error(
-                        "No se encontraron valores "
-                        "que puedan representarse."
-                    )
+                    st.error("No se encontraron valores que puedan representarse.")
                     st.stop()
 
                 # ESCALA PARA ASÍNTOTA
-
                 if tipo_grafica == "asintota":
                     amplitud = np.percentile(valores, 90)
                     amplitud *= 1.15
 
                 # ESCALA PARA LÍMITES FINITOS
-
                 else:
                     try:
                         limite_num = float(sp.N(limite))
@@ -480,13 +431,10 @@ elif seccion == "Límite":
                         amplitud_vertical = 1.0
 
                     amplitud_vertical = max(amplitud_vertical, 0.5)
-
                     ymin = (limite_num - amplitud_vertical)
-
                     ymax = (limite_num + amplitud_vertical)
 
                 # CREAR GRÁFICA
-
                 fig, ax = plt.subplots(figsize=(10, 5))
 
                 if tipo_grafica == "asintota":
@@ -500,15 +448,12 @@ elif seccion == "Límite":
                     ax.set_ylim(ymin, ymax)
 
                 # LÍNEA x = a
-
                 ax.axvline(float(a), color="red", linestyle="--", linewidth=1, label=f"x = {a:g}")
 
                 # LÍNEA HORIZONTAL DEL LÍMITE
-
                 if (tipo_grafica == "continua" or tipo_grafica == "removible"):
                     try:
                         limite_num = float(sp.N(limite))
-
                         ax.axhline(limite_num, color="green", linestyle=":", linewidth=1,
                             label = ("Límite = " f"{limite_num:g}")
                         )
@@ -516,11 +461,9 @@ elif seccion == "Límite":
                         pass
 
                 # EJE X
-
                 ax.axhline(0, color="black", linewidth = 0.7)
 
                 # CONFIGURACIÓN
-
                 ax.set_xlim(xmin, xmax)
                 ax.set_xlabel("x")
                 ax.set_ylabel("f(x)")
@@ -531,13 +474,8 @@ elif seccion == "Límite":
                 plt.close(fig)
 
                 # APROXIMACIÓN PASO A PASO
-
                 st.subheader("Aproximación paso a paso")
-
-                st.write(
-                    "Observamos qué ocurre con f(x) "
-                    "cuando x se acerca cada vez más a a."
-                )
+                st.write("Observamos qué ocurre con f(x) cuando x se acerca cada vez más a a.")
 
                 distancias = [10.0 ** (-n) for n in range(1, 13)]
 
@@ -591,10 +529,7 @@ elif seccion == "Límite":
                     )
 
         except Exception as error:
-            st.error(
-                "No se pudo analizar la función. "
-                "Revisa que esté escrita correctamente."
-            )
+            st.error("No se pudo analizar la función. Revisa que esté escrita correctamente.")
 
 # OTRAS SECCIONES
 
