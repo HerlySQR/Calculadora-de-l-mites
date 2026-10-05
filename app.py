@@ -51,14 +51,13 @@ def quitar_ceros(valor):
         return str(valor)
     return f"{valor:.12f}".rstrip("0").rstrip(".")
 
-def encontrar_intervalo_infinito(f, limite, direccion, tolerancia = 0.01, minimo = 10, maximo = 1e12):
+def encontrar_intervalo_infinito(f, limite, direccion, tolerancia = 0.01, minimo = 2, maximo = 1e8):
     x_actual = float(minimo)
 
-    # Número de veces consecutivas que debemos estar suficientemente cerca
+    # Número de puntos consecutivos que deben estar suficientemente cerca del límite
     puntos_convergencia = 3
 
     consecutivos = 0
-
     ultimo_x = x_actual
 
     for _ in range(30):
@@ -73,15 +72,16 @@ def encontrar_intervalo_infinito(f, limite, direccion, tolerancia = 0.01, minimo
             with np.errstate(divide = "ignore", invalid = "ignore", over = "ignore"):
                 y_valor = float(f(x_valor))
         except Exception:
-            x_actual *= 10
+            x_actual *= 2
             continue
 
-        # Comprobar que el valor sea finito
+        # Comprobar que sea finito
         if not np.isfinite(y_valor):
-            x_actual *= 10
+            x_actual *= 2
             continue
 
-        # Si el límite es finito, comprobar convergencia
+        # Límite finito
+
         if limite.is_finite is True:
             try:
                 limite_num = float(sp.N(limite))
@@ -92,36 +92,146 @@ def encontrar_intervalo_infinito(f, limite, direccion, tolerancia = 0.01, minimo
                 else:
                     consecutivos = 0
 
-                if (consecutivos>= puntos_convergencia):
+                if consecutivos >= puntos_convergencia:
                     ultimo_x = x_actual
                     break
 
             except Exception:
                 pass
 
-        # Si el límite es infinito, no necesitamos buscar convergencia
+        # Límite infinito
         else:
             ultimo_x = x_actual
             break
 
         ultimo_x = x_actual
-        x_actual *= 10
 
-        # Evitar intervalos excesivamente grandes
+        # Aumentamos gradualmente
+        x_actual *= 2
+
+        # Límite máximo
+
         if x_actual >= maximo:
             x_actual = maximo
             ultimo_x = maximo
             break
 
-    # Crear intervalo final
+    # INTERVALO DE VISUALIZACIÓN
+
+    factor_visualizacion = 2.0
+    extremo = ultimo_x * factor_visualizacion
+
     if direccion == 1:
         xmin = 1
-        xmax = max(100, ultimo_x)
+        xmax = extremo
     else:
-        xmin = -max(100, ultimo_x)
+        xmin = -extremo
         xmax = -1
 
-    return xmin, xmax
+    return xmin, xmax, ultimo_x
+
+def generar_puntos_tabla_infinito(f, limite, ultimo_x, direccion):
+    limite_num = float(sp.N(limite))
+
+    # Generamos muchos candidatos entre 2 y ultimo_x geomspace permite explorar varias escalas de x.
+    candidatos = np.geomspace(2, ultimo_x, 100)
+
+    datos = []
+
+    for x_abs in candidatos:
+        x_valor = (x_abs if direccion == 1 else -x_abs)
+
+        try:
+            with np.errstate(divide = "ignore", invalid = "ignore", over = "ignore"):
+                y = float(f(x_valor))
+        except Exception:
+            continue
+
+        if not np.isfinite(y):
+            continue
+
+        error = abs(y - limite_num)
+
+        datos.append((x_abs, error))
+
+    if len(datos) == 0:
+        return []
+
+    # Analizamos cómo disminuye el error
+    puntos = []
+
+    # Siempre mostramos el primer punto
+    puntos.append(datos[0][0])
+
+    ultimo_error = datos[0][1]
+
+    for x_actual, error_actual in datos[1:]:
+        if ultimo_error == 0:
+            break
+
+        # Qué fracción del error anterior queda
+        proporcion = error_actual / ultimo_error
+
+        # Si el error disminuyó bastante, mostramos este punto.
+        if proporcion < 0.5:
+            puntos.append(x_actual)
+            ultimo_error = error_actual
+
+    # Nos aseguramos de mostrar el último punto
+    if puntos[-1] != ultimo_x:
+        puntos.append(ultimo_x)
+
+    return puntos
+
+def generar_puntos_tabla_finito(f, limite, a, direccion, minimo = 1e-1, maximo = 1e-12):
+    limite_num = float(sp.N(limite))
+
+    # Distancias candidatas desde a
+    candidatos = np.geomspace(minimo, maximo, 100)
+
+    datos = []
+
+    for distancia in candidatos:
+        if direccion == "izquierda":
+            x_valor = a - distancia
+        else:
+            x_valor = a + distancia
+
+        try:
+            with np.errstate(divide = "ignore", invalid = "ignore", over = "ignore"):
+                y = float(f(x_valor))
+
+        except Exception:
+            continue
+
+        if not np.isfinite(y):
+            continue
+
+        error = abs(y - limite_num)
+        datos.append((distancia, error))
+
+    if len(datos) == 0:
+        return []
+
+    puntos = []
+
+    # Primer punto
+    puntos.append(datos[0][0])
+
+    ultimo_error = datos[0][1]
+
+    for distancia, error_actual in datos[1:]:
+        if ultimo_error == 0:
+            break
+
+        proporcion = error_actual / ultimo_error
+
+        # Añadimos un punto cuando el error se reduce al menos a la mitad.
+        if proporcion < 0.5:
+            puntos.append(distancia)
+            ultimo_error = error_actual
+
+    return puntos
 
 # APÉNDICE
 
@@ -194,15 +304,15 @@ elif seccion == "Límite":
                 f = sp.lambdify(x, funcion, modules = ["numpy"])
 
                 # ELEGIR INTERVALO
-                xmin, xmax = encontrar_intervalo_infinito(f, limite, 1 if a == sp.oo else -1)
+                xmin, xmax, ultimo_x = encontrar_intervalo_infinito(f, limite, 1 if a == sp.oo else -1)
                 valores_x = np.linspace(xmin, xmax, 3000)
 
                 # TABLA DE APROXIMACIÓN
                 st.subheader("Aproximación paso a paso")
                 st.write("Observamos qué ocurre con f(x) cuando |x| crece cada vez más.")
 
-                # Valores: 10, 100, 1000, 10000, ...
-                valores_aproximacion = [10.0 ** n for n in range(1, int(np.log10(xmax)) + 1)]
+                # Valores dependen de la velocidad de convergencia hacia el límite.
+                valores_aproximacion = generar_puntos_tabla_infinito(f, limite, ultimo_x, 1 if a == sp.oo else -1)
 
                 datos = []
 
@@ -477,33 +587,33 @@ elif seccion == "Límite":
                 st.subheader("Aproximación paso a paso")
                 st.write("Observamos qué ocurre con f(x) cuando x se acerca cada vez más a a.")
 
-                distancias = [10.0 ** (-n) for n in range(1, 13)]
+                puntos_izquierda = generar_puntos_tabla_finito(f, limite_izquierdo, float(a), "izquierda")
+                puntos_derecha = generar_puntos_tabla_finito(f, limite_derecho, float(a), "derecha")
+
+                valores_izquierda = [float(a) - d for d in puntos_izquierda]
+                valores_derecha = [float(a) + d for d in puntos_derecha]
 
                 datos_izquierda = []
                 datos_derecha = []
 
-                for distancia in distancias:
-                    x_izq = (float(a) - distancia)
-                    x_der = (float(a) + distancia)
-
+                for x_izq in valores_izquierda:
                     try:
                         y_izq = float(f(x_izq))
                     except Exception:
                         y_izq = np.nan
 
+                    datos_izquierda.append({
+                        "x": quitar_ceros(x_izq),
+                        "f(x)": (quitar_ceros(y_izq) if np.isfinite(y_izq) else "No definido")
+                    })
+
+                for x_der in valores_derecha:
                     try:
                         y_der = float(f(x_der))
                     except Exception:
                         y_der = np.nan
 
-                    datos_izquierda.append({
-                        "Distancia": quitar_ceros(distancia),
-                        "x": quitar_ceros(x_izq),
-                        "f(x)": (quitar_ceros(y_izq) if np.isfinite(y_izq) else "No definido")
-                    })
-
                     datos_derecha.append({
-                        "Distancia": quitar_ceros(distancia),
                         "x": quitar_ceros(x_der),
                         "f(x)": (quitar_ceros(y_der) if np.isfinite(y_der) else "No definido")
                     })
