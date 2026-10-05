@@ -134,8 +134,23 @@ elif seccion == "Límite":
                     st.success("La función crece sin límite.")
                 elif limite == -sp.oo:
                     st.success("La función decrece sin límite.")
-                elif limite.is_finite:
+                elif isinstance(limite, sp.AccumBounds):
+                    st.warning("El límite no existe.")
+
+                    st.info(
+                        "La función presenta un comportamiento oscilatorio "
+                        "cuando x tiende a infinito."
+                    )
+                    st.latex(r"\text{Valores de acumulación: }" + sp.latex(limite))
+
+                elif limite.is_finite is True:
                     st.success("La función se aproxima a un valor finito.")
+
+                else:
+                    st.warning(
+                        "No se pudo determinar simbólicamente el "
+                        "comportamiento del límite."
+                    )
 
                 # FUNCIÓN NUMÉRICA
 
@@ -214,6 +229,36 @@ elif seccion == "Límite":
                 # ELIMINAR VALORES EXTREMADAMENTE GRANDES PARA QUE LA GRÁFICA SEA LEGIBLE
 
                 valores_y[np.abs(valores_y) > 1e6] = np.nan
+
+                # DETECTAR OSCILACIÓN
+
+                es_oscilatoria = isinstance(limite, sp.AccumBounds)
+
+                if not es_oscilatoria:
+                    valores_finitos = valores_y[np.isfinite(valores_y)]
+
+                    if valores_finitos.size >= 50:
+                        ultimos = valores_finitos[-500:]
+                        diferencias = np.diff(ultimos)
+                        escala = max(np.max(np.abs(ultimos)), 1.0)
+                        tolerancia = 1e-8 * escala
+                        diferencias[np.abs(diferencias) < tolerancia] = 0
+                        signos = np.sign(diferencias)
+                        signos = signos[signos != 0]
+
+                        if signos.size >= 5:
+                            cambios = np.sum(signos[1:] != signos[:-1])
+
+                            amplitud = (np.max(ultimos) - np.min(ultimos))
+
+                            if (cambios >= 4 and amplitud > tolerancia):
+                                es_oscilatoria = True
+
+                if es_oscilatoria:
+                    st.info(
+                        "La función continúa oscilando "
+                        "cuando x tiende a infinito."
+                    )
 
                 # CREAR GRÁFICA
 
