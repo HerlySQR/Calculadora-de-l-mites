@@ -420,6 +420,46 @@ def detectar_singularidades_numericas(funcion, x, a, b, numero_puntos = 200, umb
 
     return resultado
 
+def extremo_en_cerradura(funcion_numerica, extremo, otro_extremo, lado, numero_pruebas = 20):
+    """
+    Comprueba numéricamente si el extremo parece
+    pertenecer a la cerradura del dominio, mirando
+    desde el interior del intervalo.
+
+    lado = 1  : acercarse desde la derecha
+    lado = -1 : acercarse desde la izquierda
+    """
+
+    longitud = abs(otro_extremo - extremo)
+
+    if longitud == 0 or not np.isfinite(longitud):
+        return False
+
+    # Distancias cada vez menores al extremo.
+    distancias = longitud * np.geomspace(1e-2, 1e-12, numero_pruebas)
+
+    valores_validos = 0
+
+    for distancia in distancias:
+        punto = extremo + lado * distancia
+
+        try:
+            with np.errstate(divide = "ignore", invalid = "ignore", over = "ignore"):
+                valor = funcion_numerica(punto)
+
+            valor = complex(valor)
+
+            # La función debe tener valores reales definidos cerca del extremo.
+            if (np.isfinite(valor.real) and np.isfinite(valor.imag) and abs(valor.imag) < 1e-10):
+                valores_validos += 1
+
+        except Exception:
+            pass
+
+    # Exigir varios valores válidos muy cerca del extremo, no solo en puntos alejados.
+    return valores_validos >= 5
+
+
 # APÉNDICE
 
 if seccion == "Apéndice":
@@ -1196,6 +1236,31 @@ elif seccion == "Integral":
             # VERIFICAR LÍMITES DE INTEGRACIÓN
             if float(sp.N(a)) >= float(sp.N(b)):
                 st.error("El límite inferior debe ser menor que el límite superior.")
+                st.stop()
+            
+            funcion_numerica = sp.lambdify(x, funcion, modules=["numpy"])
+
+            a_num = float(sp.N(a))
+            b_num = float(sp.N(b))
+
+            # Comprobar el extremo inferior desde la derecha
+            inferior_valido = extremo_en_cerradura(funcion_numerica, a_num, b_num, lado = 1)
+
+            if not inferior_valido:
+                st.error(
+                    "El límite inferior parece no pertenecer a la cerradura del dominio de la función "
+                    "dentro del intervalo."
+                )
+                st.stop()
+
+            # Comprobar el extremo superior desde la izquierda
+            superior_valido = extremo_en_cerradura(funcion_numerica, b_num, a_num, lado = -1)
+
+            if not superior_valido:
+                st.error(
+                    "El límite superior parece no pertenecer a la cerradura del dominio de la función "
+                    "dentro del intervalo."
+                )
                 st.stop()
 
             # MOSTRAR FUNCIÓN
