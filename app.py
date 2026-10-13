@@ -5,6 +5,9 @@ import sympy as sp
 
 from matplotlib.ticker import FuncFormatter
 
+import threading
+import queue
+
 # CONFIGURACIÓN
 
 st.set_page_config(
@@ -235,6 +238,188 @@ def generar_puntos_tabla_finito(f, limite, a, direccion, minimo = 1e-1, maximo =
 
     return puntos
 
+def detectar_singularidades_numericas(funcion, x, a, b, numero_puntos = 200, umbral = 100, refinamientos = 40, tolerancia = 1e-10):
+    """
+    Detecta numéricamente posibles singularidades de una función en un intervalo finito [a,b].
+
+    Busca:
+    - valores no finitos
+    - valores muy grandes
+    - cambios bruscos
+    - cambios de signo asociados a crecimiento muy grande
+
+    Después refina los intervalos sospechosos.
+    """
+
+    # COMPROBAR QUE EL INTERVALO SEA FINITO
+
+    if not (a.is_finite is True and b.is_finite is True):
+        return []
+
+    a_num = float(sp.N(a))
+    b_num = float(sp.N(b))
+
+    if a_num >= b_num:
+        return []
+
+    # CONVERTIR LA FUNCIÓN A NUMÉRICA
+    funcion_numerica = sp.lambdify(x, funcion, "numpy")
+
+    # EVALUAR UNA FUNCIÓN EN UN PUNTO
+
+    def evaluar(x_valor):
+        try:
+            with np.errstate(divide = "ignore", invalid = "ignore", over = "ignore"):
+                y = funcion_numerica(x_valor)
+
+            y = float(y)
+
+            if np.isfinite(y):
+                return y
+
+            return np.nan
+
+        except Exception:
+            return np.nan
+
+    # PRIMERA MALLA
+    valores_x = np.linspace(a_num, b_num, numero_puntos)
+
+    valores_y = np.array([evaluar(x_valor) for x_valor in valores_x], dtype=float)
+
+    # INTERVALOS SOSPECHOSOS
+    intervalos = []
+
+    for i in range(len(valores_x) - 1):
+        x1 = valores_x[i]
+        x2 = valores_x[i + 1]
+
+        y1 = valores_y[i]
+        y2 = valores_y[i + 1]
+
+        # CASO 1: ALGÚN PUNTO NO ES FINITO
+
+        if not (np.isfinite(y1) and np.isfinite(y2)):
+            intervalos.append((x1, x2))
+            continue
+
+        # CASO 2: VALORES MUY GRANDES
+
+        if (abs(y1) > umbral or abs(y2) > umbral):
+            intervalos.append((x1, x2))
+            continue
+
+        # CASO 3: CAMBIO DE SIGNO + CRECIMIENTO GRANDE
+        # Esto es especialmente útil para tan(x)
+        if y1 * y2 < 0:
+            diferencia = abs(y2 - y1)
+
+            escala = max(1, abs(y1), abs(y2))
+
+            if (diferencia / escala > 0.9 or abs(y1) > umbral / 10 or abs(y2) > umbral / 10):
+                intervalos.append((x1, x2))
+
+        # CASO 4: CAMBIO MUY GRANDE ENTRE LOS DOS PUNTOS
+        diferencia = abs(y2 - y1)
+
+        if diferencia > umbral:
+            intervalos.append((x1, x2))
+
+    # COMPROBAR TAMBIÉN LOS EXTREMOS
+    if not np.isfinite(valores_y[0]):
+        intervalos.append((a_num, valores_x[1]))
+
+    if not np.isfinite(valores_y[-1]):
+        intervalos.append((valores_x[-2], b_num))
+
+    # REFINAR INTERVALOS SOSPECHOSOS
+    candidatos = []
+
+    for izquierda, derecha in intervalos:
+        for _ in range(refinamientos):
+            medio = (izquierda + derecha) / 2
+            y_izquierda = evaluar(izquierda)
+            y_derecha = evaluar(derecha)
+            y_medio = evaluar(medio)
+
+            # SI EL PUNTO MEDIO NO ES FINITO
+            if not np.isfinite(y_medio):
+                derecha = medio
+                continue
+
+            # SI HAY UN VALOR MUY GRANDE
+
+            if abs(y_medio) > umbral:
+                # Determinamos en qué mitad está el comportamiento problemático.
+                if (np.isfinite(y_izquierda) and abs(y_izquierda) < abs(y_medio)):
+                    izquierda = medio
+                else:
+                    derecha = medio
+                continue
+
+            # CAMBIO DE SIGNO
+
+            if (np.isfinite(y_izquierda) and y_izquierda * y_medio < 0):
+                derecha = medio
+                continue
+
+            if (np.isfinite(y_derecha) and y_medio * y_derecha < 0):
+                izquierda = medio
+                continue
+
+            # SI NO HAY UNA SEÑAL CLARA, CONSERVAMOS LA MITAD CON MAYOR VARIACIÓN
+            if (np.isfinite(y_izquierda) and np.isfinite(y_derecha)):
+                diferencia_izquierda = abs(y_medio - y_izquierda)
+                diferencia_derecha = abs(y_derecha - y_medio)
+
+                if (diferencia_izquierda > diferencia_derecha):
+                    derecha = medio
+                else:
+                    izquierda = medio
+            else:
+                derecha = medio
+
+            # DETENER CUANDO EL INTERVALO ES MUY PEQUEÑO
+            if (abs(derecha - izquierda) < tolerancia):
+                break
+
+        # CANDIDATO FINAL
+        candidato = (izquierda + derecha) / 2
+        candidatos.append(candidato)
+
+    # ORDENAR CANDIDATOS
+    if not candidatos:
+        return []
+
+    candidatos.sort()
+
+    # UNIR CANDIDATOS QUE REPRESENTAN LA MISMA SINGULARIDAD
+    distancia_minima = (b_num - a_num) / numero_puntos * 2
+
+    singularidades = []
+
+    grupo = [candidatos[0]]
+
+    for candidato in candidatos[1:]:
+        if (candidato - grupo[-1] < distancia_minima):
+            grupo.append(candidato)
+        else:
+            singularidades.append(np.mean(grupo))
+            grupo = [candidato]
+
+    singularidades.append(np.mean(grupo))
+
+    # ELIMINAR DUPLICADOS MUY CERCANOS
+    resultado = []
+
+    for s in singularidades:
+        if not resultado:
+            resultado.append(s)
+        elif abs(s - resultado[-1]) > tolerancia * 10:
+            resultado.append(s)
+
+    return resultado
+
 # APÉNDICE
 
 if seccion == "Apéndice":
@@ -255,7 +440,14 @@ elif seccion == "Límite":
 
     # SI a ES UN NÚMERO
     if tipo_a == "Número":
-        a = st.number_input("Valor de a", value = 0.0, step = 0.1, format = "%.6f", key = "punto_limite")
+        a_texto = st.text_input("Valor de a", value = "0")
+        a_t = sp.sympify(a_texto)
+
+        if not a_t.is_real:
+            st.error("El punto a debe ser real.")
+            st.stop()
+
+        a = float(sp.N(a_t))
     elif tipo_a == "+∞":
         a = sp.oo
     else:
@@ -947,8 +1139,195 @@ elif seccion == "Derivada":
 
 elif seccion == "Integral":
     st.header("Integrales")
-    st.write("Aquí encontrarás teoría y ejemplos de integrales.")
+    st.write("Aquí podrás hallar valores y aproximaciones de integrales.")
+
+    # ENTRADAS
+    funcion_texto = st.text_input("Función f(x)", value = "1/x")
+
+    # ELEGIR COTAS DE x
+
+    tipo_a = st.selectbox("Límite inferior de x", ["Número", "+∞", "-∞"], key = "tipo_limite_inferior")
+
+    # SI a ES UN NÚMERO
+    if tipo_a == "Número":
+        a_texto = st.text_input("Valor del límite inferior", value="1", key="limite_punto")
+        try:
+            a = sp.sympify(a_texto)
+            if not a.is_real:
+                st.error("El punto debe ser real.")
+                st.stop()
+        except Exception:
+            st.error("Introduce un valor válido.")
+            st.stop()
+    elif tipo_a == "+∞":
+        a = sp.oo
+    else:
+        a = -sp.oo
+
+    tipo_b = st.selectbox("Límite superior de x", ["Número", "+∞", "-∞"], key = "tipo_limite_superior")
+
+    # SI b ES UN NÚMERO
+    if tipo_b == "Número":
+        b_texto = st.text_input("Valor del límite superior", value = "exp(1)", key = "limite_superior")
+        try:
+            b = sp.sympify(b_texto)
+            if not b.is_real:
+                st.error("El punto debe ser real.")
+                st.stop()
+        except Exception:
+            st.error("Introduce un valor válido.")
+            st.stop()
+    elif tipo_b == "+∞":
+        b = sp.oo
+    else:
+        b = -sp.oo
+
+    # BOTÓN ANALIZAR
+    if st.button("Analizar integral", type = "primary", key = "analizar_integral"):
+        try:
+            # CONVERTIR TEXTO A EXPRESIÓN DE SYMPY
+            funcion = sp.sympify(funcion_texto)
+
+            # VERIFICAR QUE SOLO APAREZCA x
+            if funcion.free_symbols - {x}:
+                st.error("La función solamente puede utilizar la variable x.")
+                st.stop()
+            
+            # VERIFICAR LÍMITES DE INTEGRACIÓN
+            if float(sp.N(a)) >= float(sp.N(b)):
+                st.error("El límite inferior debe ser menor que el límite superior.")
+                st.stop()
+
+            # MOSTRAR FUNCIÓN
+
+            # HALLAR SINGULARIDADES EN EL INTERVALO
+            singularidades = detectar_singularidades_numericas(funcion, x, a, b)
+
+            if singularidades:
+                texto = ", ".join(f"{s:.6g}" for s in singularidades)
+                st.warning("Se detectaron posibles singularidades en aproximadamente: " + texto)
+            else:
+                st.success("No se detectaron singularidades en el intervalo.")
+
+            # CALCULAR INTEGRAL
+            with st.spinner("Calculando la integral..."):
+                integral = sp.integrate(funcion, (x, a, b))
+
+            # MOSTRAR RESULTADO
+            st.subheader("Resultado de la integral")
+            st.latex(r"\int_{" + sp.latex(a) + "}^{" + sp.latex(b) + "}{" + sp.latex(funcion) + "dx} = " + sp.latex(integral))
+
+            # GRAFICAR EL INTEGRANDO Y LAS SINGULARIDADES
+
+            st.subheader("Gráfica de la integral")
+
+            # Por ahora, trabajamos con intervalos finitos.
+            if a.is_finite is not True or b.is_finite is not True:
+                st.info("La gráfica con sombreado todavía requiere cotas de integración finitas.")
+            else:
+                a_num = float(sp.N(a))
+                b_num = float(sp.N(b))
+
+                # Convertir la expresión simbólica en una función numérica.
+                funcion_numerica = sp.lambdify(x, funcion, modules=["numpy"])
+
+                # Crear una malla de puntos.
+                numero_puntos = 4000
+                valores_x = np.linspace(a_num, b_num, numero_puntos)
+
+                # Evaluar la función.
+                with np.errstate(divide = "ignore", invalid="ignore", over="ignore"):
+                    valores_y = np.asarray(funcion_numerica(valores_x), dtype = float)
+
+                # Asegurar que el resultado tenga la forma adecuada.
+                if valores_y.ndim == 0:
+                    valores_y = np.full_like(valores_x, valores_y.item())
+
+                valores_y = np.broadcast_to(valores_y, valores_x.shape).astype(float, copy=True)
+
+                # Eliminar valores no finitos.
+                valores_y[~np.isfinite(valores_y)] = np.nan
+
+                # SEPARAR LA GRÁFICA EN LAS SINGULARIDADES
+                singularidades_grafica = sorted(s for s in singularidades if a_num < s < b_num)
+
+                # Ocultar una pequeña zona alrededor de cada singularidad para evitar unir ambas ramas.
+                paso = (b_num - a_num) / (numero_puntos - 1)
+                margen = 3 * paso
+
+                for s in singularidades_grafica:
+                    valores_y[np.abs(valores_x - s) < margen] = np.nan
+
+                # AJUSTAR LA ESCALA VERTICAL
+                valores_finitos = valores_y[np.isfinite(valores_y)]
+
+                if len(valores_finitos) == 0:
+                    st.warning("No hay suficientes valores finitos para representar la función.")
+                else:
+                    # Usar percentiles para que una asíntota no comprima toda la gráfica.
+                    minimo_y, maximo_y = np.percentile(valores_finitos, [2, 98])
+
+                    if minimo_y == maximo_y:
+                        amplitud = max(1.0, abs(minimo_y) * 0.1)
+                        minimo_y -= amplitud
+                        maximo_y += amplitud
+                    else:
+                        margen_y = 0.15 * (maximo_y - minimo_y)
+                        minimo_y -= margen_y
+                        maximo_y += margen_y
+
+                    # DIBUJAR LA FUNCIÓN
+
+                    fig, ax = plt.subplots(figsize=(11, 6))
+
+                    ax.plot(valores_x, valores_y, label = r"$f(x)$", linewidth=1.8)
+
+                    # Eje horizontal.
+                    ax.axhline(0, color = "black", linewidth = 0.8)
+
+                    # Eje vertical.
+                    ax.axvline(0, color = "black", linewidth = 0.8)
+
+                    # SOMBREAR EL ÁREA BAJO LA CURVA
+
+                    # Crear segmentos separados por las singularidades interiores.
+                    cortes = [a_num, *singularidades_grafica, b_num]
+
+                    for izquierda, derecha in zip(cortes[:-1], cortes[1:]):
+                        # No evaluar exactamente en los cortes.
+                        epsilon = min((derecha - izquierda) * 1e-6, paso * 2)
+
+                        mascara = (
+                            (valores_x >= izquierda + epsilon)
+                            & (valores_x <= derecha - epsilon)
+                            & np.isfinite(valores_y)
+                            & (valores_y >= minimo_y)
+                            & (valores_y <= maximo_y)
+                        )
+
+                        if np.any(mascara):
+                            ax.fill_between(valores_x[mascara], valores_y[mascara], 0, alpha = 0.2)
+
+                    # MARCAR LAS SINGULARIDADES
+                    for i, s in enumerate(singularidades_grafica):
+                        ax.axvline(s, color = "red", linestyle="--", linewidth = 1.3, label = ("Posible singularidad" if i == 0 else None))
+
+                    ax.set_xlim(a_num, b_num)
+                    ax.set_ylim(minimo_y, maximo_y)
+
+                    ax.set_xlabel("x")
+                    ax.set_ylabel("f(x)")
+                    ax.set_title("Función y área bajo la curva")
+                    ax.grid(True, alpha = 0.3)
+                    ax.legend()
+
+                    st.pyplot(fig)
+                    plt.close(fig)
+
+        except Exception as error:
+            st.error("No se pudo analizar la función. Revisa que esté escrita correctamente.")
+            print(f"Error: {error}")
 
 elif seccion == "Suma infinita":
     st.header("Sumas infinitas")
-    st.write("Aquí encontrarás teoría y ejemplos de series.")
+    st.write("Aquí podrás hallar y aproximar el valor de series.")
