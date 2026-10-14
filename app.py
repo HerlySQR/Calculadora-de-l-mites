@@ -5,8 +5,7 @@ import sympy as sp
 
 from matplotlib.ticker import FuncFormatter
 
-import threading
-import queue
+import pandas as pd
 
 # CONFIGURACIÓN
 
@@ -457,6 +456,41 @@ def extremo_en_cerradura(funcion_numerica, extremo, otro_extremo, lado, numero_p
     # Exigir varios valores válidos muy cerca del extremo, no solo en puntos alejados.
     return valores_validos >= 5
 
+def suma_riemann_izquierda(f, a, b, n):
+    """Suma de Riemann usando los extremos izquierdos."""
+    h = (b - a) / n
+    x = a + h * np.arange(n)
+
+    y = np.asarray(f(x), dtype=float)
+    if not np.all(np.isfinite(y)):
+        return np.nan
+
+    return h * np.sum(y)
+
+def metodo_trapecio(f, a, b, n):
+    """Regla del trapecio compuesta."""
+    h = (b - a) / n
+    x = np.linspace(a, b, n + 1)
+
+    y = np.asarray(f(x), dtype=float)
+    if not np.all(np.isfinite(y)):
+        return np.nan
+
+    return h * (0.5 * y[0] + np.sum(y[1:-1]) + 0.5 * y[-1])
+
+def metodo_simpson(f, a, b, n):
+    """Regla de Simpson 1/3 compuesta; n debe ser par."""
+    if n % 2 != 0:
+        return np.nan
+
+    h = (b - a) / n
+    x = np.linspace(a, b, n + 1)
+
+    y = np.asarray(f(x), dtype=float)
+    if not np.all(np.isfinite(y)):
+        return np.nan
+
+    return (h / 3) * (y[0] + y[-1] + 4 * np.sum(y[1:-1:2]) + 2 * np.sum(y[2:-1:2]))
 
 # APÉNDICE
 
@@ -1435,6 +1469,64 @@ elif seccion == "Integral":
 
                 if a == -sp.oo or b == sp.oo:
                     st.caption(f"La gráfica muestra solamente " f"[{a_graf:.6g}, {b_graf:.6g}]. La ventana es finita aunque la integral tenga una o ambas cotas infinitas.")
+
+                # Tabla de aproximaciones numéricas
+                st.subheader("Aproximaciones mediante métodos numéricos")
+
+                # Estos métodos requieren límites finitos
+                if a.is_finite is True and b.is_finite is True:
+                    a_num = float(sp.N(a))
+                    b_num = float(sp.N(b))
+
+                    particiones = [2, 4, 8, 16, 32, 64, 128, 256]
+                    resultados = []
+
+                    for n in particiones:
+                        try:
+                            riemann = suma_riemann_izquierda(funcion_numerica, a_num, b_num, n)
+                            trapecio = metodo_trapecio(funcion_numerica, a_num, b_num, n)
+                            simpson = metodo_simpson(funcion_numerica, a_num, b_num, n)
+
+                            resultados.append({
+                                "Particiones (n)": n,
+                                "Riemann izquierda": riemann,
+                                "Trapecio": trapecio,
+                                "Simpson": simpson
+                            })
+
+                        except (ValueError, TypeError, OverflowError, ZeroDivisionError):
+                            resultados.append({
+                                "Particiones (n)": n,
+                                "Riemann izquierda": np.nan,
+                                "Trapecio": np.nan,
+                                "Simpson": np.nan
+                            })
+
+                    tabla = pd.DataFrame(resultados)
+
+                    # Mostrar los valores con hasta 10 cifras significativas
+                    columnas = [
+                        "Riemann izquierda",
+                        "Trapecio",
+                        "Simpson"
+                    ]
+
+                    for columna in columnas:
+                        tabla[columna] = tabla[columna].map(
+                            lambda valor: (
+                                f"{valor:.10g}" if np.isfinite(valor) else "No definido"
+                            )
+                        )
+
+                    st.dataframe(tabla, hide_index=True, use_container_width=True)
+                else:
+                    st.info(
+                        "Esta tabla requiere límites de integración finitos. "
+                        "Para integrales impropias debemos truncar el intervalo "
+                        "y analizar por separado el comportamiento en el infinito "
+                        "o en las singularidades."
+                    )
+
 
         except Exception as error:
             st.error("No se pudo analizar la función. Revisa que esté escrita correctamente.")
