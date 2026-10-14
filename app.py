@@ -115,14 +115,12 @@ def encontrar_intervalo_infinito(f, limite, direccion, tolerancia = 0.01, minimo
         x_actual *= 2
 
         # Límite máximo
-
         if x_actual >= maximo:
             x_actual = maximo
             ultimo_x = maximo
             break
 
     # INTERVALO DE VISUALIZACIÓN
-
     factor_visualizacion = 2.0
     extremo = ultimo_x * factor_visualizacion
 
@@ -238,7 +236,7 @@ def generar_puntos_tabla_finito(f, limite, a, direccion, minimo = 1e-1, maximo =
 
     return puntos
 
-def detectar_singularidades_numericas(funcion, x, a, b, numero_puntos = 200, umbral = 100, refinamientos = 40, tolerancia = 1e-10):
+def detectar_singularidades_numericas(funcion, x, a, b, numero_puntos = 200, umbral = 1e12, refinamientos = 40, tolerancia = 1e-10):
     """
     Detecta numéricamente posibles singularidades de una función en un intervalo finito [a,b].
 
@@ -1186,11 +1184,11 @@ elif seccion == "Integral":
 
     # ELEGIR COTAS DE x
 
-    tipo_a = st.selectbox("Límite inferior de x", ["Número", "+∞", "-∞"], key = "tipo_limite_inferior")
+    tipo_a = st.selectbox("Límite inferior de x", ["Número", "-∞"], key = "tipo_limite_inferior")
 
     # SI a ES UN NÚMERO
     if tipo_a == "Número":
-        a_texto = st.text_input("Valor del límite inferior", value="1", key="limite_punto")
+        a_texto = st.text_input("Valor del límite inferior", value = "1", key="limite_punto")
         try:
             a = sp.sympify(a_texto)
             if not a.is_real:
@@ -1199,12 +1197,10 @@ elif seccion == "Integral":
         except Exception:
             st.error("Introduce un valor válido.")
             st.stop()
-    elif tipo_a == "+∞":
-        a = sp.oo
     else:
         a = -sp.oo
 
-    tipo_b = st.selectbox("Límite superior de x", ["Número", "+∞", "-∞"], key = "tipo_limite_superior")
+    tipo_b = st.selectbox("Límite superior de x", ["Número", "+∞"], key = "tipo_limite_superior")
 
     # SI b ES UN NÚMERO
     if tipo_b == "Número":
@@ -1219,8 +1215,6 @@ elif seccion == "Integral":
             st.stop()
     elif tipo_b == "+∞":
         b = sp.oo
-    else:
-        b = -sp.oo
 
     # BOTÓN ANALIZAR
     if st.button("Analizar integral", type = "primary", key = "analizar_integral"):
@@ -1234,160 +1228,213 @@ elif seccion == "Integral":
                 st.stop()
             
             # VERIFICAR LÍMITES DE INTEGRACIÓN
-            if float(sp.N(a)) >= float(sp.N(b)):
+
+            if not bool(a < b):
                 st.error("El límite inferior debe ser menor que el límite superior.")
                 st.stop()
+
+            # La integral ordinaria sobre un intervalo infinito admite estas combinaciones:
+            # [número, número], [número, +∞], [-∞, número] y [-∞, +∞].
             
-            funcion_numerica = sp.lambdify(x, funcion, modules=["numpy"])
+            # DEFINIR EL INTERVALO DE VISUALIZACIÓN
+            if a.is_finite is True:
+                a_num = float(sp.N(a))
+            else:
+                a_num = None
 
-            a_num = float(sp.N(a))
-            b_num = float(sp.N(b))
+            if b.is_finite is True:
+                b_num = float(sp.N(b))
+            else:
+                b_num = None
 
-            # Comprobar el extremo inferior desde la derecha
-            inferior_valido = extremo_en_cerradura(funcion_numerica, a_num, b_num, lado = 1)
+            # COMPROBAR LOS EXTREMOS FINITOS
+            funcion_numerica = sp.lambdify(x, funcion, modules = ["numpy"])
+            a_limite = sp.limit(funcion, x, a)
+            b_limite = sp.limit(funcion, x, b)
 
-            if not inferior_valido:
-                st.error(
-                    "El límite inferior parece no pertenecer a la cerradura del dominio de la función "
-                    "dentro del intervalo."
-                )
-                st.stop()
+            if a_num is not None and b_num is not None:
+                # Ambas cotas son finitas.
+                a_graf = a_num
+                b_graf = b_num
+            elif a_num is not None:
+                # [a, +∞)
+                a_graf = a_num
+                (_, b_graf, _) = encontrar_intervalo_infinito(funcion_numerica, b_limite, 1)
+            elif b_num is not None:
+                # (-∞, b]
+                b_graf = b_num
+                (a_graf, _, _) = encontrar_intervalo_infinito(funcion_numerica, a_limite, -1)
+            else:
+                # (-∞, +∞)
+                (a_graf, _, _) = encontrar_intervalo_infinito(funcion_numerica, a_limite, -1)
+                (_, b_graf, _) = encontrar_intervalo_infinito(funcion_numerica, b_limite, 1)
 
-            # Comprobar el extremo superior desde la izquierda
-            superior_valido = extremo_en_cerradura(funcion_numerica, b_num, a_num, lado = -1)
+            if a_num is not None:
+                inferior_valido = extremo_en_cerradura(funcion_numerica, a_num, b_graf, lado = 1)
 
-            if not superior_valido:
-                st.error(
-                    "El límite superior parece no pertenecer a la cerradura del dominio de la función "
-                    "dentro del intervalo."
-                )
-                st.stop()
+                if not inferior_valido:
+                    st.error("El límite inferior parece no pertenecer a la cerradura del dominio de la función.")
+                    st.stop()
 
-            # MOSTRAR FUNCIÓN
+            if b_num is not None:
+                superior_valido = extremo_en_cerradura(funcion_numerica, b_num, a_graf, lado = -1)
 
-            # HALLAR SINGULARIDADES EN EL INTERVALO
-            singularidades = detectar_singularidades_numericas(funcion, x, a, b)
+                if not superior_valido:
+                    st.error("El límite superior parece no pertenecer a la cerradura del dominio de la función.")
+                    st.stop()
+
+            # DETECTAR POSIBLES SINGULARIDADES
+
+            singularidades = detectar_singularidades_numericas(funcion, x, sp.Float(a_graf), sp.Float(b_graf))
 
             if singularidades:
                 texto = ", ".join(f"{s:.6g}" for s in singularidades)
-                st.warning("Se detectaron posibles singularidades en aproximadamente: " + texto)
+                st.warning("Posibles singularidades dentro de la ventana examinada: " + texto)
             else:
-                st.success("No se detectaron singularidades en el intervalo.")
+                st.info("No se detectaron posibles singularidades en la ventana examinada.")
 
             # CALCULAR INTEGRAL
+
             with st.spinner("Calculando la integral..."):
-                integral = sp.integrate(funcion, (x, a, b))
+                try:
+                    if a.is_finite is True and b.is_finite is True:
+                        integral = sp.integrate(funcion, (x, a, b))
+                    elif a.is_finite is True and b == sp.oo:
+                        # Integral desde a hasta +∞: límite de la integral desde a hasta T.
+                        T = sp.symbols("T", real=True)
+                        integral_truncada = sp.integrate(funcion, (x, a, T))
+                        integral = sp.limit(integral_truncada, T, sp.oo)
+
+                    elif a == -sp.oo and b.is_finite is True:
+                        # Integral desde -∞ hasta b.
+                        T = sp.symbols("T", real=True)
+                        integral_truncada = sp.integrate(funcion, (x, T, b))
+                        integral = sp.limit(integral_truncada, T, -sp.oo)
+
+                    elif a == -sp.oo and b == sp.oo:
+                        # Separamos en dos integrales para evitar confundir convergencia con valor principal.
+                        izquierda = sp.integrate(funcion, (x, -sp.oo, 0))
+                        derecha = sp.integrate(funcion, (x, 0, sp.oo))
+                        integral = sp.simplify(izquierda + derecha)
+
+                    else:
+                        st.error("Combinación de límites no válida.")
+                        st.stop()
+
+                except Exception as error:
+                    st.error("No se pudo calcular la integral: " + str(error))
+                    st.stop()
 
             # MOSTRAR RESULTADO
+
             st.subheader("Resultado de la integral")
-            st.latex(r"\int_{" + sp.latex(a) + "}^{" + sp.latex(b) + "}{" + sp.latex(funcion) + "dx} = " + sp.latex(integral))
 
-            # GRAFICAR EL INTEGRANDO Y LAS SINGULARIDADES
+            st.latex(r"\int_{" + sp.latex(a) + r"}^{" + sp.latex(b) + r"} " + sp.latex(funcion) + r"\,dx = " + sp.latex(integral))
 
-            st.subheader("Gráfica de la integral")
-
-            # Por ahora, trabajamos con intervalos finitos.
-            if a.is_finite is not True or b.is_finite is not True:
-                st.info("La gráfica con sombreado todavía requiere cotas de integración finitas.")
+            if isinstance(integral, sp.Integral):
+                st.warning("SymPy dejó una integral sin evaluar. Todavía no se puede concluir su convergencia.")
+            elif integral in (sp.oo, -sp.oo, sp.zoo, sp.nan):
+                st.error("La integral no tiene un valor finito según el resultado simbólico.")
+            elif integral.is_finite is True:
+                st.success("Se obtuvo un resultado finito. Si existen singularidades interiores, todavía debe verificarse la convergencia de cada tramo.")
             else:
-                a_num = float(sp.N(a))
-                b_num = float(sp.N(b))
+                st.warning("No se pudo confirmar automáticamente la convergencia.")
 
-                # Convertir la expresión simbólica en una función numérica.
-                funcion_numerica = sp.lambdify(x, funcion, modules=["numpy"])
+            # GRAFICAR EL INTEGRANDO
 
-                # Crear una malla de puntos.
-                numero_puntos = 4000
-                valores_x = np.linspace(a_num, b_num, numero_puntos)
+            st.subheader("Gráfica de la función y área")
 
-                # Evaluar la función.
-                with np.errstate(divide = "ignore", invalid="ignore", over="ignore"):
-                    valores_y = np.asarray(funcion_numerica(valores_x), dtype = float)
+            numero_puntos = 4000
 
-                # Asegurar que el resultado tenga la forma adecuada.
-                if valores_y.ndim == 0:
-                    valores_y = np.full_like(valores_x, valores_y.item())
+            valores_x = np.linspace(a_graf, b_graf, numero_puntos)
 
-                valores_y = np.broadcast_to(valores_y, valores_x.shape).astype(float, copy=True)
+            with np.errstate(divide = "ignore", invalid = "ignore", over = "ignore"):
+                valores_y = np.asarray(funcion_numerica(valores_x), dtype=float)
 
-                # Eliminar valores no finitos.
-                valores_y[~np.isfinite(valores_y)] = np.nan
+            if valores_y.ndim == 0:
+                valores_y = np.full_like(valores_x, valores_y.item())
 
-                # SEPARAR LA GRÁFICA EN LAS SINGULARIDADES
-                singularidades_grafica = sorted(s for s in singularidades if a_num < s < b_num)
+            valores_y = np.broadcast_to(valores_y, valores_x.shape).astype(float, copy=True)
 
-                # Ocultar una pequeña zona alrededor de cada singularidad para evitar unir ambas ramas.
-                paso = (b_num - a_num) / (numero_puntos - 1)
-                margen = 3 * paso
+            valores_y[~np.isfinite(valores_y)] = np.nan
 
-                for s in singularidades_grafica:
-                    valores_y[np.abs(valores_x - s) < margen] = np.nan
+            # Separar la gráfica en las singularidades detectadas.
+            singularidades_grafica = sorted(s for s in singularidades if a_graf < s < b_graf)
 
-                # AJUSTAR LA ESCALA VERTICAL
-                valores_finitos = valores_y[np.isfinite(valores_y)]
+            paso = (b_graf - a_graf) / (numero_puntos - 1)
+            margen = 3 * paso
 
-                if len(valores_finitos) == 0:
-                    st.warning("No hay suficientes valores finitos para representar la función.")
+            for s in singularidades_grafica:
+                valores_y[np.abs(valores_x - s) < margen] = np.nan
+
+            valores_finitos = valores_y[np.isfinite(valores_y)]
+
+            if len(valores_finitos) == 0:
+                st.warning("No hay valores finitos suficientes para representar la función.")
+            else:
+
+                if singularidades:
+                    # Aplicar percentiles únicamente si se detectaron singularidades
+                    if len(valores_finitos) > 0:
+                        minimo_y, maximo_y = np.percentile(valores_finitos, [2, 98])
+
+                        # Evitar un intervalo vertical de amplitud cero
+                        if minimo_y == maximo_y:
+                            margen = max(1.0, abs(minimo_y) * 0.1)
+                            minimo_y -= margen
+                            maximo_y += margen
                 else:
-                    # Usar percentiles para que una asíntota no comprima toda la gráfica.
-                    minimo_y, maximo_y = np.percentile(valores_finitos, [2, 98])
+                    minimo_y, maximo_y = min(valores_finitos), max(valores_finitos)
+                    minimo_y -= 10 ** int(np.log10(abs(minimo_y) + 1))
+                    maximo_y += 10 ** int(np.log10(abs(maximo_y) + 1))
 
-                    if minimo_y == maximo_y:
-                        amplitud = max(1.0, abs(minimo_y) * 0.1)
-                        minimo_y -= amplitud
-                        maximo_y += amplitud
-                    else:
-                        margen_y = 0.15 * (maximo_y - minimo_y)
-                        minimo_y -= margen_y
-                        maximo_y += margen_y
+                fig, ax = plt.subplots(figsize = (11, 6))
+                ax.set_ylim(minimo_y, maximo_y)
 
-                    # DIBUJAR LA FUNCIÓN
+                ax.plot(valores_x, valores_y, label = r"$f(x)$", linewidth=1.8)
 
-                    fig, ax = plt.subplots(figsize=(11, 6))
+                ax.axhline(0, color = "black", linewidth = 0.8)
 
-                    ax.plot(valores_x, valores_y, label = r"$f(x)$", linewidth=1.8)
+                # Sombrear por tramos, sin cruzar singularidades.
+                cortes = [a_graf, *singularidades_grafica, b_graf]
 
-                    # Eje horizontal.
-                    ax.axhline(0, color = "black", linewidth = 0.8)
+                for izquierda, derecha in zip(cortes[:-1], cortes[1:]):
+                    mascara = (
+                        (valores_x >= izquierda)
+                        & (valores_x <= derecha)
+                        & np.isfinite(valores_y)
+                        & (valores_y >= minimo_y)
+                        & (valores_y <= maximo_y)
+                    )
 
-                    # Eje vertical.
-                    ax.axvline(0, color = "black", linewidth = 0.8)
+                    if np.any(mascara):
+                        ax.fill_between(valores_x[mascara], valores_y[mascara], 0, alpha = 0.2)
 
-                    # SOMBREAR EL ÁREA BAJO LA CURVA
+                # Marcar las singularidades detectadas.
+                for i, s in enumerate(singularidades_grafica):
+                    ax.axvline(s, color="red", linestyle="--", linewidth=1.3, label = ("Posible singularidad" if i == 0 else None))
 
-                    # Crear segmentos separados por las singularidades interiores.
-                    cortes = [a_num, *singularidades_grafica, b_num]
+                # Indicar visualmente los extremos infinitos.
+                if a == -sp.oo:
+                    ax.annotate("−∞", xy=(0.01, 0.03), xycoords="axes fraction")
 
-                    for izquierda, derecha in zip(cortes[:-1], cortes[1:]):
-                        # No evaluar exactamente en los cortes.
-                        epsilon = min((derecha - izquierda) * 1e-6, paso * 2)
+                if b == sp.oo:
+                    ax.annotate("+∞", xy=(0.99, 0.03), xycoords="axes fraction", ha="right")
 
-                        mascara = (
-                            (valores_x >= izquierda + epsilon)
-                            & (valores_x <= derecha - epsilon)
-                            & np.isfinite(valores_y)
-                            & (valores_y >= minimo_y)
-                            & (valores_y <= maximo_y)
-                        )
+                ax.set_xlim(a_graf, b_graf)
+                ax.set_ylim(minimo_y, maximo_y)
 
-                        if np.any(mascara):
-                            ax.fill_between(valores_x[mascara], valores_y[mascara], 0, alpha = 0.2)
+                ax.set_xlabel("x")
+                ax.set_ylabel("f(x)")
+                ax.set_title("Función y área en la ventana de visualización")
+                ax.grid(True, alpha=0.3)
+                ax.legend()
 
-                    # MARCAR LAS SINGULARIDADES
-                    for i, s in enumerate(singularidades_grafica):
-                        ax.axvline(s, color = "red", linestyle="--", linewidth = 1.3, label = ("Posible singularidad" if i == 0 else None))
+                st.pyplot(fig)
+                plt.close(fig)
 
-                    ax.set_xlim(a_num, b_num)
-                    ax.set_ylim(minimo_y, maximo_y)
-
-                    ax.set_xlabel("x")
-                    ax.set_ylabel("f(x)")
-                    ax.set_title("Función y área bajo la curva")
-                    ax.grid(True, alpha = 0.3)
-                    ax.legend()
-
-                    st.pyplot(fig)
-                    plt.close(fig)
+                if a == -sp.oo or b == sp.oo:
+                    st.caption(f"La gráfica muestra solamente " f"[{a_graf:.6g}, {b_graf:.6g}]. La ventana es finita aunque la integral tenga una o ambas cotas infinitas.")
 
         except Exception as error:
             st.error("No se pudo analizar la función. Revisa que esté escrita correctamente.")
