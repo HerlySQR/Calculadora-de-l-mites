@@ -56,11 +56,11 @@ def quitar_ceros(valor):
         return str(valor)
     return f"{valor:.12f}".rstrip("0").rstrip(".")
 
-def encontrar_intervalo_infinito(f, limite, direccion, tolerancia = 0.01, minimo = 2, maximo = 1e8):
+def encontrar_intervalo_infinito(f, limite, direccion, tolerancia = 0.1, minimo = 2, maximo = 1e8):
     x_actual = float(minimo)
 
     # Número de puntos consecutivos que deben estar suficientemente cerca del límite
-    puntos_convergencia = 3
+    puntos_convergencia = 2
 
     consecutivos = 0
     ultimo_x = x_actual
