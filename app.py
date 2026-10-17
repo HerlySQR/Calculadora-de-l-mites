@@ -461,7 +461,18 @@ def suma_riemann_izquierda(f, a, b, n):
     h = (b - a) / n
     x = a + h * np.arange(n)
 
-    y = np.asarray(f(x), dtype=float)
+    y = np.asarray(f(x), dtype = float)
+    if not np.all(np.isfinite(y)):
+        return np.nan
+
+    return h * np.sum(y)
+
+def suma_riemann_derecha(f, a, b, n):
+    """Suma de Riemann usando los extremos derechos."""
+    h = (b - a) / n
+    x = a + h * np.arange(1, n + 1)
+
+    y = np.asarray(f(x), dtype = float)
     if not np.all(np.isfinite(y)):
         return np.nan
 
@@ -1484,12 +1495,14 @@ elif seccion == "Integral":
                     for n in particiones:
                         try:
                             riemann = suma_riemann_izquierda(funcion_numerica, a_num, b_num, n)
+                            riemann_derecha = suma_riemann_derecha(funcion_numerica, a_num, b_num, n)
                             trapecio = metodo_trapecio(funcion_numerica, a_num, b_num, n)
                             simpson = metodo_simpson(funcion_numerica, a_num, b_num, n)
 
                             resultados.append({
                                 "Particiones (n)": n,
                                 "Riemann izquierda": riemann,
+                                "Riemann derecha": riemann_derecha,
                                 "Trapecio": trapecio,
                                 "Simpson": simpson
                             })
@@ -1498,6 +1511,7 @@ elif seccion == "Integral":
                             resultados.append({
                                 "Particiones (n)": n,
                                 "Riemann izquierda": np.nan,
+                                "Riemann derecha": np.nan,
                                 "Trapecio": np.nan,
                                 "Simpson": np.nan
                             })
@@ -1507,6 +1521,7 @@ elif seccion == "Integral":
                     # Mostrar los valores con hasta 10 cifras significativas
                     columnas = [
                         "Riemann izquierda",
+                        "Riemann derecha",
                         "Trapecio",
                         "Simpson"
                     ]
