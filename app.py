@@ -9,9 +9,6 @@ st.set_page_config(
     layout = "wide"
 )
 
-# Variable simbólica
-x = sp.symbols("x")
-
 # CONTROL DEL MENÚ
 if "seccion" not in st.session_state:
     st.session_state.seccion = "Límite"
@@ -64,5 +61,5 @@ elif seccion == "Integral":
     ejecutar_integrales()
 
 elif seccion == "Suma infinita":
-    st.header("Sumas infinitas")
-    st.write("Aquí podrás hallar y aproximar el valor de series.")
+    from suma_infinita import ejecutar_sumas_infinitas
+    ejecutar_sumas_infinitas()
