@@ -456,6 +456,17 @@ def extremo_en_cerradura(funcion_numerica, extremo, otro_extremo, lado, numero_p
     # Exigir varios valores válidos muy cerca del extremo, no solo en puntos alejados.
     return valores_validos >= 5
 
+def evaluar_funcion(f, x):
+    """Evalúa f en un arreglo y devuelve un arreglo del mismo tamaño."""
+    x = np.asarray(x, dtype=float)
+    with np.errstate(all = "ignore"):
+        y = np.asarray(f(x), dtype = float)
+
+    if y.ndim == 0:
+        y = np.full(x.shape, float(y))
+
+    return np.broadcast_to(y, x.shape).astype(float)
+
 def suma_riemann_izquierda(f, a, b, n):
     """Suma de Riemann usando los extremos izquierdos."""
     h = (b - a) / n
@@ -483,7 +494,7 @@ def metodo_trapecio(f, a, b, n):
     h = (b - a) / n
     x = np.linspace(a, b, n + 1)
 
-    y = np.asarray(f(x), dtype=float)
+    y = np.asarray(f(x), dtype = float)
     if not np.all(np.isfinite(y)):
         return np.nan
 
@@ -497,7 +508,7 @@ def metodo_simpson(f, a, b, n):
     h = (b - a) / n
     x = np.linspace(a, b, n + 1)
 
-    y = np.asarray(f(x), dtype=float)
+    y = np.asarray(f(x), dtype = float)
     if not np.all(np.isfinite(y)):
         return np.nan
 
@@ -1369,78 +1380,186 @@ elif seccion == "Integral":
                 except Exception as error:
                     st.error("No se pudo calcular la integral: " + str(error))
                     st.stop()
+            
+            # GUARDAR LOS RESULTADOS PARA LAS SIGUIENTES EJECUCIONES
+            st.session_state["datos_integral"] = {
+                "funcion": funcion,
+                "a": a,
+                "b": b,
+                "a_num": a_num,
+                "b_num": b_num,
+                "a_graf": a_graf,
+                "b_graf": b_graf,
+                "singularidades": singularidades,
+                "integral": integral,
+            }
+        except Exception as error:
+            st.error("No se pudo analizar la función. Revisa que esté escrita correctamente.")
+            print(f"Error: {error}")
 
-            # MOSTRAR RESULTADO
+    # MOSTRAR RESULTADO, TABLA Y GRÁFICA INTERACTIVA
 
-            st.subheader("Resultado de la integral")
+    datos = st.session_state.get("datos_integral")
 
-            st.latex(r"\int_{" + sp.latex(a) + r"}^{" + sp.latex(b) + r"} " + sp.latex(funcion) + r"\,dx = " + sp.latex(integral))
+    if datos is not None:
+        funcion = datos["funcion"]
+        a = datos["a"]
+        b = datos["b"]
+        a_num = datos["a_num"]
+        b_num = datos["b_num"]
+        a_graf = datos["a_graf"]
+        b_graf = datos["b_graf"]
+        singularidades = datos["singularidades"]
+        integral = datos["integral"]
 
-            if isinstance(integral, sp.Integral):
-                st.warning("SymPy dejó una integral sin evaluar. Todavía no se puede concluir su convergencia.")
-            elif integral in (sp.oo, -sp.oo, sp.zoo, sp.nan):
-                st.error("La integral no tiene un valor finito según el resultado simbólico.")
-            elif integral.is_finite is True:
-                st.success("Se obtuvo un resultado finito. Si existen singularidades interiores, todavía debe verificarse la convergencia de cada tramo.")
-            else:
-                st.warning("No se pudo confirmar automáticamente la convergencia.")
+        funcion_numerica = sp.lambdify(x, funcion, modules = ["numpy"])
 
-            # GRAFICAR EL INTEGRANDO
+        # RESULTADO SIMBÓLICO
 
-            st.subheader("Gráfica de la función y área")
+        st.subheader("Resultado de la integral")
 
-            numero_puntos = 4000
+        st.latex(r"\int_{" + sp.latex(a) + r"}^{" + sp.latex(b) + r"} " + sp.latex(funcion) + r"\,dx = " + sp.latex(integral))
 
-            valores_x = np.linspace(a_graf, b_graf, numero_puntos)
+        if isinstance(integral, sp.Integral):
+            st.warning("SymPy dejó una integral sin evaluar. No se ha confirmado su convergencia.")
+        elif integral in (sp.oo, -sp.oo, sp.zoo, sp.nan):
+            st.error("La integral no tiene un valor finito según el resultado simbólico.")
+        elif integral.is_finite is True:
+            st.success(
+                "Se obtuvo un resultado finito simbólico. "
+                "Las singularidades interiores requieren un "
+                "análisis adicional de convergencia."
+            )
+        else:
+            st.warning("No se pudo confirmar automáticamente la convergencia.")
 
-            with np.errstate(divide = "ignore", invalid = "ignore", over = "ignore"):
-                valores_y = np.asarray(funcion_numerica(valores_x), dtype=float)
+        # TABLA DE APROXIMACIONES
 
-            if valores_y.ndim == 0:
-                valores_y = np.full_like(valores_x, valores_y.item())
+        metodo_seleccionado = None
+        n_seleccionado = None
 
-            valores_y = np.broadcast_to(valores_y, valores_x.shape).astype(float, copy=True)
+        if a_num is not None and b_num is not None:
+            st.subheader("Aproximaciones numéricas")
 
-            valores_y[~np.isfinite(valores_y)] = np.nan
+            particiones = [2, 4, 8, 16, 32, 64, 128]
+            resultados = []
 
-            # Separar la gráfica en las singularidades detectadas.
-            singularidades_grafica = sorted(s for s in singularidades if a_graf < s < b_graf)
+            for n in particiones:
+                resultados.append({
+                    "Particiones (n)": n,
+                    "Riemann izquierda": suma_riemann_izquierda(funcion_numerica, a_num, b_num, n),
+                    "Riemann derecha": suma_riemann_derecha(funcion_numerica, a_num, b_num, n),
+                    "Trapecio": metodo_trapecio(funcion_numerica, a_num, b_num, n),
+                    "Simpson": metodo_simpson(funcion_numerica, a_num, b_num, n),
+                })
 
-            paso = (b_graf - a_graf) / (numero_puntos - 1)
-            margen = 3 * paso
+            tabla = pd.DataFrame(resultados)
 
-            for s in singularidades_grafica:
-                valores_y[np.abs(valores_x - s) < margen] = np.nan
+            evento = st.dataframe(
+                tabla,
+                hide_index = True,
+                use_container_width = True,
+                on_select = "rerun",
+                selection_mode = "single-cell",
+                key = "tabla_integrales_interactiva",
+                column_config = {
+                    "Particiones (n)": st.column_config.NumberColumn(format = "%d"),
+                    "Riemann izquierda": st.column_config.NumberColumn(format = "%.10g"),
+                    "Riemann derecha": st.column_config.NumberColumn(format = "%.10g"),
+                    "Trapecio": st.column_config.NumberColumn(format = "%.10g"),
+                    "Simpson": st.column_config.NumberColumn(format = "%.10g"),
+                },
+            )
 
-            valores_finitos = valores_y[np.isfinite(valores_y)]
+            celdas = evento.selection.cells
 
-            if len(valores_finitos) == 0:
-                st.warning("No hay valores finitos suficientes para representar la función.")
-            else:
+            if celdas:
+                fila, nombre_columna = celdas[0]
 
-                if singularidades:
-                    # Aplicar percentiles únicamente si se detectaron singularidades
-                    if len(valores_finitos) > 0:
-                        minimo_y, maximo_y = np.percentile(valores_finitos, [2, 98])
+                # Obtener el valor de la celda seleccionada
+                valor = tabla.loc[fila, nombre_columna]
 
-                        # Evitar un intervalo vertical de amplitud cero
-                        if minimo_y == maximo_y:
-                            margen = max(1.0, abs(minimo_y) * 0.1)
-                            minimo_y -= margen
-                            maximo_y += margen
+                # Guardar el método y el número de particiones
+                if nombre_columna in [
+                    "Riemann izquierda",
+                    "Riemann derecha",
+                    "Trapecio",
+                    "Simpson"
+                ]:
+                    metodo_seleccionado = nombre_columna
+                    n_seleccionado = int(tabla.iloc[fila]["Particiones (n)"])
                 else:
-                    minimo_y, maximo_y = min(valores_finitos), max(valores_finitos)
-                    minimo_y -= 10 ** int(np.log10(abs(minimo_y) + 1))
-                    maximo_y += 10 ** int(np.log10(abs(maximo_y) + 1))
+                    # Se seleccionó la columna de particiones
+                    metodo_seleccionado = None
+                    n_seleccionado = None
+            else:
+                metodo_seleccionado = None
+                n_seleccionado = None
 
-                fig, ax = plt.subplots(figsize = (11, 6))
-                ax.set_ylim(minimo_y, maximo_y)
+        else:
+            st.info(
+                "La tabla de métodos numéricos requiere límites "
+                "finitos. La gráfica seguirá mostrando la ventana "
+                "finita seleccionada para la integral impropia."
+            )
 
-                ax.plot(valores_x, valores_y, label = r"$f(x)$", linewidth=1.8)
+        # -------------------------------------------------
+        # C. CONSTRUIR UNA ÚNICA GRÁFICA
+        # -------------------------------------------------
 
-                ax.axhline(0, color = "black", linewidth = 0.8)
+        st.subheader("Gráfica de la función y sus aproximaciones")
 
-                # Sombrear por tramos, sin cruzar singularidades.
+        numero_puntos = 4000
+        valores_x = np.linspace(a_graf, b_graf, numero_puntos)
+
+        with np.errstate(divide = "ignore", invalid = "ignore", over = "ignore"):
+            valores_y = np.asarray(funcion_numerica(valores_x), dtype = float)
+
+        if valores_y.ndim == 0:
+            valores_y = np.full_like(valores_x, valores_y.item())
+
+        valores_y = np.broadcast_to(valores_y, valores_x.shape).astype(float, copy=True)
+
+        valores_y[~np.isfinite(valores_y)] = np.nan
+
+        singularidades_grafica = sorted(
+            s for s in singularidades if a_graf < s < b_graf
+        )
+
+        paso_grafica = ((b_graf - a_graf) / (numero_puntos - 1))
+        margen_singularidad = 3 * paso_grafica
+
+        for s in singularidades_grafica:
+            valores_y[np.abs(valores_x - s) < margen_singularidad] = np.nan
+
+        valores_finitos = valores_y[np.isfinite(valores_y)]
+
+        if len(valores_finitos) == 0:
+            st.warning("No hay suficientes valores finitos para graficar.")
+        else:
+            # Escala vertical: percentiles solamente si hay singularidades.
+            if singularidades_grafica:
+                minimo_y, maximo_y = np.percentile(valores_finitos, [2, 98])
+            else:
+                minimo_y = np.min(valores_finitos)
+                maximo_y = np.max(valores_finitos)
+
+            if minimo_y == maximo_y:
+                margen_y = max(1.0, abs(minimo_y) * 0.1)
+            else:
+                margen_y = 0.08 * (maximo_y - minimo_y)
+
+            minimo_y -= margen_y
+            maximo_y += margen_y
+
+            fig, ax = plt.subplots(figsize=(11, 6))
+
+            ax.plot(valores_x, valores_y, color = "blue", linewidth = 1.8, label = r"$f(x)$")
+
+            ax.axhline(0, color="black", linewidth=0.8)
+
+            # Si no se seleccionó ningún método, mostrar el área original.
+            if metodo_seleccionado is None:
                 cortes = [a_graf, *singularidades_grafica, b_graf]
 
                 for izquierda, derecha in zip(cortes[:-1], cortes[1:]):
@@ -1453,99 +1572,147 @@ elif seccion == "Integral":
                     )
 
                     if np.any(mascara):
-                        ax.fill_between(valores_x[mascara], valores_y[mascara], 0, alpha = 0.2)
+                        ax.fill_between(valores_x[mascara], valores_y[mascara], 0, alpha = 0.2,)
 
-                # Marcar las singularidades detectadas.
-                for i, s in enumerate(singularidades_grafica):
-                    ax.axvline(s, color="red", linestyle="--", linewidth=1.3, label = ("Posible singularidad" if i == 0 else None))
+            # Marcar singularidades detectadas.
+            for i, s in enumerate(singularidades_grafica):
+                ax.axvline(
+                    s,
+                    color = "red",
+                    linestyle = "--",
+                    linewidth = 1.3,
+                    label = ("Posible singularidad" if i == 0 else None),
+                )
 
-                # Indicar visualmente los extremos infinitos.
-                if a == -sp.oo:
-                    ax.annotate("−∞", xy=(0.01, 0.03), xycoords="axes fraction")
+            # DIBUJAR EL MÉTODO SELECCIONADO
 
-                if b == sp.oo:
-                    ax.annotate("+∞", xy=(0.99, 0.03), xycoords="axes fraction", ha="right")
+            if metodo_seleccionado is not None:
+                n = n_seleccionado
+                h = (b_num - a_num) / n
 
-                ax.set_xlim(a_graf, b_graf)
-                ax.set_ylim(minimo_y, maximo_y)
+                x_nodos = np.linspace(a_num, b_num, n + 1)
 
-                ax.set_xlabel("x")
-                ax.set_ylabel("f(x)")
-                ax.set_title("Función y área en la ventana de visualización")
-                ax.grid(True, alpha=0.3)
-                ax.legend()
+                with np.errstate(all="ignore"):
+                    y_nodos = np.asarray(funcion_numerica(x_nodos), dtype = float)
 
-                st.pyplot(fig)
-                plt.close(fig)
+                if not np.all(np.isfinite(y_nodos)):
+                    st.warning("Algún nodo coincide con un valor no finito. No se pueden dibujar todas las particiones.")
 
-                if a == -sp.oo or b == sp.oo:
-                    st.caption(f"La gráfica muestra solamente " f"[{a_graf:.6g}, {b_graf:.6g}]. La ventana es finita aunque la integral tenga una o ambas cotas infinitas.")
-
-                # Tabla de aproximaciones numéricas
-                st.subheader("Aproximaciones mediante métodos numéricos")
-
-                # Estos métodos requieren límites finitos
-                if a.is_finite is True and b.is_finite is True:
-                    a_num = float(sp.N(a))
-                    b_num = float(sp.N(b))
-
-                    particiones = [2, 4, 8, 16, 32, 64, 128, 256]
-                    resultados = []
-
-                    for n in particiones:
-                        try:
-                            riemann = suma_riemann_izquierda(funcion_numerica, a_num, b_num, n)
-                            riemann_derecha = suma_riemann_derecha(funcion_numerica, a_num, b_num, n)
-                            trapecio = metodo_trapecio(funcion_numerica, a_num, b_num, n)
-                            simpson = metodo_simpson(funcion_numerica, a_num, b_num, n)
-
-                            resultados.append({
-                                "Particiones (n)": n,
-                                "Riemann izquierda": riemann,
-                                "Riemann derecha": riemann_derecha,
-                                "Trapecio": trapecio,
-                                "Simpson": simpson
-                            })
-
-                        except (ValueError, TypeError, OverflowError, ZeroDivisionError):
-                            resultados.append({
-                                "Particiones (n)": n,
-                                "Riemann izquierda": np.nan,
-                                "Riemann derecha": np.nan,
-                                "Trapecio": np.nan,
-                                "Simpson": np.nan
-                            })
-
-                    tabla = pd.DataFrame(resultados)
-
-                    # Mostrar los valores con hasta 10 cifras significativas
-                    columnas = [
-                        "Riemann izquierda",
-                        "Riemann derecha",
-                        "Trapecio",
-                        "Simpson"
-                    ]
-
-                    for columna in columnas:
-                        tabla[columna] = tabla[columna].map(
-                            lambda valor: (
-                                f"{valor:.10g}" if np.isfinite(valor) else "No definido"
-                            )
+                else:
+                    # Riemann por la izquierda.
+                    if metodo_seleccionado == "Riemann izquierda":
+                        ax.bar(
+                            x_nodos[:-1],
+                            y_nodos[:-1],
+                            width = h,
+                            align = "edge",
+                            alpha = 0.35,
+                            edgecolor = "blue",
+                            label = f"Riemann izquierda (n={n})",
                         )
 
-                    st.dataframe(tabla, hide_index=True, use_container_width=True)
-                else:
-                    st.info(
-                        "Esta tabla requiere límites de integración finitos. "
-                        "Para integrales impropias debemos truncar el intervalo "
-                        "y analizar por separado el comportamiento en el infinito "
-                        "o en las singularidades."
+                    # Riemann por la derecha.
+                    elif metodo_seleccionado == "Riemann derecha":
+                        ax.bar(
+                            x_nodos[:-1],
+                            y_nodos[1:],
+                            width = h,
+                            align = "edge",
+                            alpha = 0.35,
+                            color = "lightgreen",
+                            edgecolor = "green",
+                            label = f"Riemann derecha (n={n})",
+                        )
+
+                    # Regla del trapecio.
+                    elif metodo_seleccionado == "Trapecio":
+                        for i in range(n):
+                            ax.fill(
+                                [x_nodos[i], x_nodos[i], x_nodos[i + 1], x_nodos[i + 1],],
+                                [0, y_nodos[i], y_nodos[i + 1], 0,],
+                                color = "orange",
+                                alpha = 0.3,
+                                edgecolor = "darkorange",
+                            )
+
+                        ax.plot(
+                            x_nodos,
+                            y_nodos,
+                            "o--",
+                            color = "darkorange",
+                            markersize = 3,
+                            label = f"Trapecios (n={n})",
+                        )
+
+                    # Regla de Simpson: parábolas por pares de subintervalos.
+                    elif metodo_seleccionado == "Simpson":
+                        for i in range(0, n, 2):
+                            xp = x_nodos[i:i + 3]
+                            yp = y_nodos[i:i + 3]
+
+                            coeficientes = np.polyfit(xp, yp, 2)
+                            polinomio = np.poly1d(coeficientes)
+
+                            xc = np.linspace(xp[0], xp[-1], 100)
+                            yc = polinomio(xc)
+
+                            ax.fill_between(
+                                xc, yc, 0,
+                                color = "purple",
+                                alpha = 0.2,
+                            )
+
+                            ax.plot(
+                                xc, yc,
+                                color = "purple",
+                                linewidth = 2,
+                            )
+
+                        ax.plot(
+                            [], [],
+                            color = "purple",
+                            linewidth = 2,
+                            label = f"Parábolas de Simpson (n={n})",
+                        )
+
+                    # Líneas verticales para identificar los subintervalos.
+                    for xn in x_nodos:
+                        ax.axvline(
+                            xn,
+                            color = "gray",
+                            alpha = 0.25,
+                            linewidth = 0.7,
+                        )
+
+                    ax.scatter(
+                        x_nodos,
+                        y_nodos,
+                        color = "red",
+                        s = 18,
+                        zorder = 5,
+                        label = "Nodos",
                     )
 
+                    ax.set_title(f"{metodo_seleccionado} — {n} particiones")
+            else:
+                ax.set_title("Función y área: selecciona una celda numérica de la tabla")
 
-        except Exception as error:
-            st.error("No se pudo analizar la función. Revisa que esté escrita correctamente.")
-            print(f"Error: {error}")
+            ax.set_xlim(a_graf, b_graf)
+            ax.set_ylim(minimo_y, maximo_y)
+            ax.set_xlabel("x")
+            ax.set_ylabel("f(x)")
+            ax.grid(True, alpha = 0.3)
+            ax.legend()
+            fig.tight_layout()
+
+            st.pyplot(fig)
+            plt.close(fig)
+
+            if a == -sp.oo or b == sp.oo:
+                st.caption(
+                    f"La gráfica muestra la ventana finita "
+                    f"[{a_graf:.6g}, {b_graf:.6g}] de la integral impropia."
+                )
 
 elif seccion == "Suma infinita":
     st.header("Sumas infinitas")
