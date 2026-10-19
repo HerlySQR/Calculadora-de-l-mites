@@ -498,6 +498,7 @@ def ejecutar_integrales():
 
         if a_num is not None and b_num is not None:
             st.subheader("Aproximaciones numéricas")
+            st.write("Haz click en una celda para graficar el método numérico.")
 
             particiones = [2, 4, 8, 16, 32, 64, 128]
             resultados = []
@@ -696,7 +697,7 @@ def ejecutar_integrales():
                         ax.plot(
                             x_nodos,
                             y_nodos,
-                            "o--",
+                            "--",
                             color = "darkorange",
                             markersize = 3,
                             label = f"Trapecios (n={n})",
@@ -741,15 +742,6 @@ def ejecutar_integrales():
                             alpha = 0.25,
                             linewidth = 0.7,
                         )
-
-                    ax.scatter(
-                        x_nodos,
-                        y_nodos,
-                        color = "red",
-                        s = 18,
-                        zorder = 5,
-                        label = "Nodos",
-                    )
 
                     ax.set_title(f"{metodo_seleccionado} — {n} particiones")
             else:

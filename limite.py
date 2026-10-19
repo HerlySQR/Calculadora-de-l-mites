@@ -317,7 +317,7 @@ def ejecutar_limites():
                     ymax = (limite_num + amplitud_vertical)
 
                 # CREAR GRÁFICA
-                fig, ax = plt.subplots(figsize=(10, 5))
+                fig, ax = plt.subplots(figsize = (10, 5))
 
                 if tipo_grafica == "asintota":
                     ax.plot(izquierda, y_izquierda, label = "x < a")
@@ -330,7 +330,7 @@ def ejecutar_limites():
                     ax.set_ylim(ymin, ymax)
 
                 # LÍNEA x = a
-                ax.axvline(float(a), color="red", linestyle="--", linewidth=1, label=f"x = {a:g}")
+                ax.axvline(float(a), color = "red", linestyle = "--", linewidth = 1, label = f"x = {a:g}")
 
                 # LÍNEA HORIZONTAL DEL LÍMITE
                 if (tipo_grafica == "continua" or tipo_grafica == "removible"):
