@@ -45,8 +45,8 @@ seccion = st.session_state.seccion
 # APÉNDICE
 
 if seccion == "Apéndice":
-    st.header("Apéndice")
-    st.write("Aquí encontrarás definiciones y resultados auxiliares.")
+    from apendice import ejecutar_apendice
+    ejecutar_apendice()
 
 elif seccion == "Límite":
     from limite import ejecutar_limites
