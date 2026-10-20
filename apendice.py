@@ -161,7 +161,7 @@ def ejecutar_apendice():
                 r"\lim_{x\to a^+}f(x)"
             )
 
-        with st.expander("4. Límites al infinito"):
+        with st.expander("3. Límites al infinito"):
             st.write(
                 "Estudian el comportamiento de una función "
                 "cuando x crece o decrece sin límite."

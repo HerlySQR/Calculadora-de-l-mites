@@ -193,7 +193,7 @@ def ejecutar_derivadas():
 
                 # TABLA IZQUIERDA
                 if puntos_izquierda:
-                    st.markdown("### Aproximación por la izquierda")
+                    st.markdown("Aproximación por la izquierda")
 
                     tabla_izquierda = []
 
@@ -209,7 +209,7 @@ def ejecutar_derivadas():
 
                 # TABLA DERECHA
                 if puntos_derecha:
-                    st.markdown("### Aproximación por la derecha")
+                    st.markdown("Aproximación por la derecha")
 
                     tabla_derecha = []
 
