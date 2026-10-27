@@ -13,22 +13,24 @@ def ejecutar_limites():
     funcion_texto = st.text_input("Función f(x)", value = "sin(x)/x", key = "funcion_limite")
 
     # ELEGIR HACIA DÓNDE SE APROXIMA x
-    tipo_a = st.selectbox("x se aproxima a", ["Número", "+∞", "-∞"], key = "tipo_punto_limite")
+    a_texto = st.text_input("Valor de a (al que x se aproxima)", value = "0")
 
-    # SI a ES UN NÚMERO
-    if tipo_a == "Número":
-        a_texto = st.text_input("Valor de a", value = "0")
-        a_t = sp.sympify(a_texto)
+    try:
+        if a_texto.strip().lower() == "inf":
+            a = sp.oo
+        elif a_texto.strip().lower() == "-inf":
+            a = -sp.oo
+        else:
+            a = sp.sympify(a_texto)
 
-        if not a_t.is_real:
-            st.error("El punto a debe ser real.")
-            st.stop()
+            # Verificar que sea un número real y finito
+            if a.is_real is not True or a.is_finite is not True:
+                st.error("Introduce un número real finito, inf o -inf.")
+                st.stop()
 
-        a = float(sp.N(a_t))
-    elif tipo_a == "+∞":
-        a = sp.oo
-    else:
-        a = -sp.oo
+    except (ValueError, TypeError, SyntaxError, sp.SympifyError):
+        st.error("Introduce un valor válido, como 2, -3.5, pi, inf o -inf.")
+        st.stop()
 
     # BOTÓN ANALIZAR
     if st.button("Analizar límite", type = "primary", key = "analizar_limite"):
@@ -155,7 +157,7 @@ def ejecutar_limites():
 
                 # CREAR GRÁFICA
                 fig, ax = plt.subplots(figsize = (10, 5))
-                ax.plot(valores_x, valores_y, label="f(x)")
+                ax.plot(valores_x, valores_y, label = "f(x)")
 
                 # LÍNEA DEL LÍMITE
                 if limite not in (sp.oo, -sp.oo):
@@ -325,12 +327,13 @@ def ejecutar_limites():
                     ax.set_ylim(-amplitud, amplitud)
 
                 else:
-                    ax.plot(izquierda, y_izquierda, color = "blue")
+                    ax.plot(izquierda, y_izquierda, color = "blue", label = "f(x)")
                     ax.plot(derecha, y_derecha, color = "blue")
                     ax.set_ylim(ymin, ymax)
 
                 # LÍNEA x = a
-                ax.axvline(float(a), color = "red", linestyle = "--", linewidth = 1, label = f"x = {a:g}")
+                ax.axvline(float(a), color = "red", linestyle = "--", linewidth = 1, label = f"x = {float(a):g}"
+)
 
                 # LÍNEA HORIZONTAL DEL LÍMITE
                 if (tipo_grafica == "continua" or tipo_grafica == "removible"):
@@ -349,8 +352,8 @@ def ejecutar_limites():
                 ax.set_xlim(xmin, xmax)
                 ax.set_xlabel("x")
                 ax.set_ylabel("f(x)")
-                ax.set_title("Comportamiento de f(x) " f"cuando x → {a:g}")
-                ax.grid(True, alpha=0.3)
+                ax.set_title("Comportamiento de f(x) "f"cuando x → {float(a):g}")
+                ax.grid(True, alpha = 0.3)
                 ax.legend()
                 st.pyplot(fig)
                 plt.close(fig)

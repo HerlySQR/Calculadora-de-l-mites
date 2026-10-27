@@ -6,6 +6,12 @@ import scipy.special
 
 import pandas as pd
 
+opciones_N = [
+    1, 2, 5, 10, 20, 50, 100, 200, 500,
+    1000, 2000, 5000, 10000, 20000, 50000,
+    100000, 200000, 500000, 1000000
+]
+
 def ejecutar_sumas_infinitas():
     st.header("Sumas infinitas")
     st.write("Estudia el comportamiento de una serie mediante sus sumas parciales y observa si parecen converger.")
@@ -16,10 +22,15 @@ def ejecutar_sumas_infinitas():
     col1, col2 = st.columns(2)
 
     with col1:
-        indice_inicial = st.number_input("Primer índice n₀", value = 1, step = 1, key = "indice_inicial_serie")
-
+        indice_inicial = st.number_input("Primer índice", value = 1, step = 1, key = "indice_inicial_serie")
+    
     with col2:
-        N_max = st.number_input("Último índice N", min_value = 2, value = 100, step = 1, key = "N_max_serie")
+        N_max = st.selectbox(
+            "Último índice N (Solo para la tabla)",
+            options = opciones_N,
+            index = 6,  # Valor predeterminado: 100
+            key = "N_max_serie"
+        )
 
     if st.button("Analizar serie", type = "primary", key = "analizar_serie"):
         try:
@@ -198,10 +209,27 @@ def ejecutar_sumas_infinitas():
         # TABLA DE SUMAS PARCIALES
         st.subheader("Tabla de sumas parciales")
 
+        # Elegir índices representativos según N
+        candidatos = np.array(opciones_N)
+
+        # Conservar los índices que están dentro del intervalo
+        indices_mostrar = candidatos[
+            (candidatos >= datos["n0"]) &
+            (candidatos <= N)
+        ]
+
+        # Incluir siempre el primer y último índice
+        indices_mostrar = np.unique(np.append(
+            indices_mostrar, [datos["n0"], N]
+        ))
+
+        # Obtener las posiciones correspondientes en los arreglos
+        posiciones = indices_mostrar - datos["n0"]
+
         tabla = pd.DataFrame({
-            "N": indices,
-            "Término a_N": terminos,
-            "Suma parcial S_N": sumas_parciales
+            "N": indices_mostrar,
+            "Término a_N": terminos[posiciones],
+            "Suma parcial S_N": sumas_parciales[posiciones]
         })
 
         st.dataframe(
@@ -237,7 +265,7 @@ def ejecutar_sumas_infinitas():
         with col2:
             st.subheader("Sumas parciales")
 
-            fig2, ax2 = plt.subplots(figsize=(6, 4))
+            fig2, ax2 = plt.subplots(figsize = (6, 4))
 
             ax2.plot(
                 indices,
@@ -249,7 +277,7 @@ def ejecutar_sumas_infinitas():
             ax2.set_xlabel("N")
             ax2.set_ylabel("S_N")
             ax2.set_title("Comportamiento de las sumas parciales")
-            ax2.grid(True, alpha=0.3)
+            ax2.grid(True, alpha = 0.3)
 
             st.pyplot(fig2)
             plt.close(fig2)
@@ -265,14 +293,6 @@ def ejecutar_sumas_infinitas():
             diferencias = np.abs(np.diff(valores_finitos))
 
             if (len(diferencias) >= 4 and np.all(diferencias[-4:] < 1e-4)):
-                st.write(
-                    "Las últimas sumas parciales varían poco. "
-                    "Esto sugiere estabilización numérica, pero "
-                    "no demuestra la convergencia de la serie."
-                )
+                st.write("Las últimas sumas parciales varían poco. Esto sugiere estabilización numérica, pero no demuestra la convergencia de la serie.")
             else:
-                st.write(
-                    "Las sumas parciales todavía presentan "
-                    "variaciones apreciables o no muestran una "
-                    "estabilización clara."
-                )
+                st.write("Las sumas parciales todavía presentan variaciones apreciables o no muestran una estabilización clara.")

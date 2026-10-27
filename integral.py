@@ -631,7 +631,7 @@ def ejecutar_integrales():
                     )
 
                     if np.any(mascara):
-                        ax.fill_between(valores_x[mascara], valores_y[mascara], 0, alpha = 0.2,)
+                        ax.fill_between(valores_x[mascara], valores_y[mascara], 0, alpha = 0.2, label = "Área bajo la curva")
 
             # Marcar singularidades detectadas.
             for i, s in enumerate(singularidades_grafica):

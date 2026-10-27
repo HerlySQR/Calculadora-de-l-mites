@@ -11,7 +11,7 @@ def ejecutar_derivadas():
 
     # ENTRADAS
     funcion_texto = st.text_input("Función f(x)", value = "x**2")
-    a_texto = st.text_input("Punto x = a", value = "1")
+    a_texto = st.text_input("Punto x = a (Para hallar f'(a))", value = "1")
 
     if st.button("Analizar derivada", type = "primary", key = "analizar_derivada"):
         try:
@@ -141,13 +141,10 @@ def ejecutar_derivadas():
                                 cociente_izquierda = (float(funcion_numerica(x_izquierda)) - valor_a_num) / h_izquierda
 
                             if np.isfinite(cociente_izquierda):
-                                error_izquierda = abs(cociente_izquierda - derivada_num)
-
                                 datos_izquierda.append({
                                     "h": h_izquierda,
                                     "x": x_izquierda,
-                                    "cociente": cociente_izquierda,
-                                    "error": error_izquierda
+                                    "cociente": cociente_izquierda
                                 })
 
                         except (ValueError, TypeError, OverflowError):
@@ -163,13 +160,10 @@ def ejecutar_derivadas():
                                 cociente_derecha = (float(funcion_numerica(x_derecha)) - valor_a_num) / h_derecha
 
                             if np.isfinite(cociente_derecha):
-                                error_derecha = abs(cociente_derecha - derivada_num)
-
                                 datos_derecha.append({
                                     "h": h_derecha,
                                     "x": x_derecha,
-                                    "cociente": cociente_derecha,
-                                    "error": error_derecha
+                                    "cociente": cociente_derecha
                                 })
 
                         except (ValueError, TypeError, OverflowError):
@@ -201,8 +195,7 @@ def ejecutar_derivadas():
                         tabla_izquierda.append({
                             "h": punto["h"],
                             "x = a + h": punto["x"],
-                            "Cociente incremental": punto["cociente"],
-                            "Error": punto["error"]
+                            "Cociente incremental": punto["cociente"]
                         })
 
                     st.dataframe(tabla_izquierda, use_container_width = True, hide_index = True)
@@ -217,8 +210,7 @@ def ejecutar_derivadas():
                         tabla_derecha.append({
                             "h": punto["h"],
                             "x = a + h": punto["x"],
-                            "Cociente incremental": punto["cociente"],
-                            "Error": punto["error"]
+                            "Cociente incremental": punto["cociente"]
                         })
 
                     st.dataframe(tabla_derecha, use_container_width = True, hide_index = True)
